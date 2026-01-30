@@ -6,10 +6,12 @@ import { MainPanel } from "./components/MainPanel";
 import { UploadModal } from "./components/UploadModal";
 import "./index.css";
 
+type SelectedView = "summary" | "demo" | number;
+
 interface AppState {
   returns: Record<number, TaxReturn>;
   hasStoredKey: boolean;
-  selectedYear: number | "demo";
+  selectedYear: SelectedView;
   isLoading: boolean;
 }
 
@@ -21,6 +23,30 @@ async function fetchInitialState(): Promise<Pick<AppState, "returns" | "hasStore
   const { hasKey } = await configRes.json();
   const returns = await returnsRes.json();
   return { hasStoredKey: hasKey, returns };
+}
+
+function getDefaultSelection(returns: Record<number, TaxReturn>): SelectedView {
+  const years = Object.keys(returns).map(Number).sort((a, b) => a - b);
+  if (years.length === 0) return "demo";
+  if (years.length === 1) return years[0];
+  return "summary";
+}
+
+function buildSidebarItems(returns: Record<number, TaxReturn>): { id: string; label: string }[] {
+  const years = Object.keys(returns).map(Number).sort((a, b) => a - b);
+
+  if (years.length === 0) {
+    return [{ id: "demo", label: "Demo" }];
+  }
+
+  if (years.length === 1) {
+    return years.map((y) => ({ id: String(y), label: String(y) }));
+  }
+
+  return [
+    { id: "summary", label: "Summary" },
+    ...years.map((y) => ({ id: String(y), label: String(y) })),
+  ];
 }
 
 export function App() {
@@ -37,11 +63,7 @@ export function App() {
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
   );
 
-  const years = Object.keys(state.returns).map(Number).sort((a, b) => a - b);
-  const items = [
-    { id: "demo", label: "Demo" },
-    ...years.map((y) => ({ id: String(y), label: String(y) })),
-  ];
+  const items = buildSidebarItems(state.returns);
 
   useEffect(() => {
     fetchInitialState()
@@ -49,7 +71,7 @@ export function App() {
         setState({
           returns,
           hasStoredKey,
-          selectedYear: "demo",
+          selectedYear: getDefaultSelection(returns),
           isLoading: false,
         });
       })
@@ -68,7 +90,12 @@ export function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
-      const selectedId = state.selectedYear === "demo" ? "demo" : String(state.selectedYear);
+      const selectedId =
+        state.selectedYear === "demo"
+          ? "demo"
+          : state.selectedYear === "summary"
+            ? "summary"
+            : String(state.selectedYear);
       const selectedIndex = items.findIndex((item) => item.id === selectedId);
 
       if (e.key === "j" && selectedIndex < items.length - 1) {
@@ -76,7 +103,7 @@ export function App() {
         if (nextItem) {
           setState((s) => ({
             ...s,
-            selectedYear: nextItem.id === "demo" ? "demo" : Number(nextItem.id),
+            selectedYear: parseSelectedId(nextItem.id),
           }));
         }
       }
@@ -85,7 +112,7 @@ export function App() {
         if (prevItem) {
           setState((s) => ({
             ...s,
-            selectedYear: prevItem.id === "demo" ? "demo" : Number(prevItem.id),
+            selectedYear: parseSelectedId(prevItem.id),
           }));
         }
       }
@@ -97,6 +124,12 @@ export function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
+
+  function parseSelectedId(id: string): SelectedView {
+    if (id === "demo") return "demo";
+    if (id === "summary") return "summary";
+    return Number(id);
+  }
 
   async function processUpload(file: File, apiKey: string) {
     const formData = new FormData();
@@ -117,7 +150,8 @@ export function App() {
       ...s,
       returns,
       hasStoredKey: true,
-      selectedYear: taxReturn.year,
+      // Stay on summary if already there, otherwise navigate to new year
+      selectedYear: s.selectedYear === "summary" ? "summary" : taxReturn.year,
     }));
   }
 
@@ -146,8 +180,26 @@ export function App() {
   function handleSelect(id: string) {
     setState((s) => ({
       ...s,
-      selectedYear: id === "demo" ? "demo" : Number(id),
+      selectedYear: parseSelectedId(id),
     }));
+  }
+
+  async function handleDelete(id: string) {
+    const year = Number(id);
+    if (isNaN(year)) return;
+
+    await fetch(`/api/returns/${year}`, { method: "DELETE" });
+
+    setState((s) => {
+      const newReturns = { ...s.returns };
+      delete newReturns[year];
+      const newSelection = s.selectedYear === year ? getDefaultSelection(newReturns) : s.selectedYear;
+      return {
+        ...s,
+        returns: newReturns,
+        selectedYear: newSelection,
+      };
+    });
   }
 
   if (state.isLoading) {
@@ -158,24 +210,37 @@ export function App() {
     );
   }
 
-  const taxReturn =
+  const selectedId =
     state.selectedYear === "demo"
-      ? demoReturn
-      : state.returns[state.selectedYear] || demoReturn;
-
-  const title = state.selectedYear === "demo" ? "Demo" : String(state.selectedYear);
+      ? "demo"
+      : state.selectedYear === "summary"
+        ? "summary"
+        : String(state.selectedYear);
 
   return (
     <div className="flex h-screen">
       <Sidebar
         items={items}
-        selectedId={state.selectedYear === "demo" ? "demo" : String(state.selectedYear)}
+        selectedId={selectedId}
         onSelect={handleSelect}
         onUpload={handleUploadFromSidebar}
+        onDelete={handleDelete}
         isUploading={isUploading}
       />
 
-      <MainPanel data={taxReturn} title={title} />
+      {state.selectedYear === "summary" ? (
+        <MainPanel view="summary" returns={state.returns} />
+      ) : (
+        <MainPanel
+          view="receipt"
+          data={
+            state.selectedYear === "demo"
+              ? demoReturn
+              : state.returns[state.selectedYear] || demoReturn
+          }
+          title={state.selectedYear === "demo" ? "Demo" : String(state.selectedYear)}
+        />
+      )}
 
       <div className="fixed top-4 right-4">
         <button
