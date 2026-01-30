@@ -37,3 +37,20 @@ export function formatCompact(amount: number): string {
   }
   return `${sign}$${abs.toFixed(0)}`;
 }
+
+export function formatCurrencyCents(amount: number, suffix?: string): string {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? "-" : "";
+
+  let decimals: number;
+  if (abs >= 1) {
+    decimals = 2;
+  } else if (abs >= 0.01) {
+    decimals = 2;
+  } else {
+    decimals = 3;
+  }
+
+  const formatted = `${sign}$${abs.toFixed(decimals)}`;
+  return suffix ? `${formatted}/${suffix}` : formatted;
+}
