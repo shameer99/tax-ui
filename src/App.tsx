@@ -5,11 +5,13 @@ import { demoReturn } from "./data/demo";
 import { sampleReturns } from "./data/sampleData";
 import { MainPanel } from "./components/MainPanel";
 import { UploadModal } from "./components/UploadModal";
+import { SettingsModal } from "./components/SettingsModal";
 import { Chat } from "./components/Chat";
 import { extractYearFromFilename } from "./lib/year-extractor";
 import "./index.css";
 
 const DEV_SAMPLE_DATA_KEY = "dev-use-sample-data";
+const CHAT_OPEN_KEY = "tax-chat-open";
 
 type SelectedView = "summary" | "demo" | number | `pending:${string}`;
 
@@ -68,7 +70,11 @@ export function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [configureKeyOnly, setConfigureKeyOnly] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
-  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(() => {
+    const stored = localStorage.getItem(CHAT_OPEN_KEY);
+    return stored === null ? true : stored === "true";
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDark, setIsDark] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
   );
@@ -98,6 +104,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
   }, [isDark]);
+
+  useEffect(() => {
+    localStorage.setItem(CHAT_OPEN_KEY, String(isChatOpen));
+  }, [isChatOpen]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -261,6 +271,29 @@ export function App() {
     setState((s) => ({ ...s, hasStoredKey: true }));
   }
 
+  async function handleClearData() {
+    const res = await fetch("/api/clear-data", { method: "POST" });
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error || `HTTP ${res.status}`);
+    }
+    // Reset to initial state
+    setState({
+      returns: {},
+      hasStoredKey: false,
+      selectedYear: "demo",
+      isLoading: false,
+      isDev: state.isDev,
+    });
+    // Clear dev sample data preference and chat data
+    localStorage.removeItem(DEV_SAMPLE_DATA_KEY);
+    localStorage.removeItem(CHAT_OPEN_KEY);
+    localStorage.removeItem("tax-chat-history");
+    localStorage.removeItem("tax-chat-width");
+    // Reset chat to open (default for new users)
+    setIsChatOpen(true);
+  }
+
   function handleSelect(id: string) {
     setState((s) => ({
       ...s,
@@ -319,6 +352,7 @@ export function App() {
       navItems,
       selectedId,
       onSelect: handleSelect,
+      onOpenSettings: () => setIsSettingsOpen(true),
     };
 
     if (selectedPendingUpload) {
@@ -367,6 +401,14 @@ export function App() {
         hasStoredKey={state.hasStoredKey}
         pendingFiles={pendingFiles}
         configureKeyOnly={configureKeyOnly}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        hasApiKey={state.hasStoredKey}
+        onSaveApiKey={handleSaveApiKey}
+        onClearData={handleClearData}
       />
     </div>
   );

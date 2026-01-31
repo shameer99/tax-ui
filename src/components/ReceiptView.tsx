@@ -51,14 +51,14 @@ export function ReceiptView({ data }: Props) {
               </svg>
             </Menu.Trigger>
             <Menu.Portal>
-              <Menu.Positioner sideOffset={4} className="z-50">
-                <Menu.Popup className="bg-[var(--color-bg)] border border-[var(--color-border)] py-1 min-w-[120px] text-sm">
+              <Menu.Positioner sideOffset={6} className="z-50">
+                <Menu.Popup className="menu-popup bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl shadow-lg shadow-black/5 dark:shadow-black/20 py-1.5 min-w-[130px] text-sm">
                   {(["daily", "hourly", "minute", "second"] as TimeUnit[]).map((unit) => (
                     <Menu.Item
                       key={unit}
                       onClick={() => setTimeUnit(unit)}
-                      className={`px-3 py-1.5 cursor-pointer hover:bg-[var(--color-bg-muted)] data-[highlighted]:bg-[var(--color-bg-muted)] outline-none ${
-                        timeUnit === unit ? "text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"
+                      className={`menu-item mx-1.5 px-2.5 py-1.5 cursor-pointer rounded-lg outline-none select-none ${
+                        timeUnit === unit ? "text-[var(--color-text)] font-medium" : "text-[var(--color-text-muted)]"
                       }`}
                     >
                       {TIME_UNIT_LABELS[unit]}

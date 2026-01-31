@@ -193,20 +193,22 @@ export function Chat({ returns, hasApiKey, onClose }: Props) {
       {/* Header */}
       <header className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
         <span className="text-sm">Chat</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {messages.length > 0 && (
             <button
               onClick={handleNewChat}
-              className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              className="px-2 py-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] rounded-lg"
             >
               New
             </button>
           )}
           <button
             onClick={onClose}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] rounded-lg"
           >
-            ×
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
           </button>
         </div>
       </header>
@@ -227,7 +229,7 @@ export function Chat({ returns, hasApiKey, onClose }: Props) {
                   <button
                     key={suggestion}
                     onClick={() => setInput(suggestion)}
-                    className="w-full text-left text-xs px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                    className="w-full text-left text-xs px-3 py-2 border border-[var(--color-border)] rounded-lg text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   >
                     {suggestion}
                   </button>

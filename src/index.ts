@@ -1,6 +1,6 @@
 import { serve } from "bun";
 import Anthropic from "@anthropic-ai/sdk";
-import { getReturns, saveReturn, deleteReturn, getApiKey, saveApiKey } from "./lib/storage";
+import { getReturns, saveReturn, deleteReturn, getApiKey, saveApiKey, clearAllData } from "./lib/storage";
 import { parseTaxReturn, extractYearFromPdf } from "./lib/parser";
 import index from "./index.html";
 
@@ -39,6 +39,12 @@ const server = serve({
           return Response.json({ error: "Invalid API key" }, { status: 400 });
         }
         await saveApiKey(apiKey.trim());
+        return Response.json({ success: true });
+      },
+    },
+    "/api/clear-data": {
+      POST: async () => {
+        await clearAllData();
         return Response.json({ success: true });
       },
     },

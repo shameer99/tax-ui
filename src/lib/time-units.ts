@@ -38,7 +38,7 @@ export function formatTimeUnitValue(amount: number, unit: TimeUnit): string {
 
 export function formatTimeUnitValueCompact(amount: number, unit: TimeUnit): string {
   if (unit === "daily" || unit === "hourly") {
-    return formatCompact(Math.round(amount));
+    return `${formatCompact(Math.round(amount))}/${TIME_UNIT_SUFFIXES[unit]}`;
   }
   return formatCurrencyCents(amount, TIME_UNIT_SUFFIXES[unit]);
 }

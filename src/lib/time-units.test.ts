@@ -73,16 +73,16 @@ describe("formatTimeUnitValue", () => {
 });
 
 describe("formatTimeUnitValueCompact", () => {
-  test("formats daily compactly", () => {
-    expect(formatTimeUnitValueCompact(480, "daily")).toBe("$480");
+  test("formats daily compactly with suffix", () => {
+    expect(formatTimeUnitValueCompact(480, "daily")).toBe("$480/day");
   });
 
-  test("formats hourly compactly", () => {
-    expect(formatTimeUnitValueCompact(60, "hourly")).toBe("$60");
+  test("formats hourly compactly with suffix", () => {
+    expect(formatTimeUnitValueCompact(60, "hourly")).toBe("$60/hr");
   });
 
   test("formats large daily values with K suffix", () => {
-    expect(formatTimeUnitValueCompact(1500, "daily")).toBe("$2K");
+    expect(formatTimeUnitValueCompact(1500, "daily")).toBe("$2K/day");
   });
 
   test("formats minute same as regular", () => {

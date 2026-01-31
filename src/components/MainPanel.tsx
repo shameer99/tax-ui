@@ -14,6 +14,7 @@ interface CommonProps {
   navItems: NavItem[];
   selectedId: string;
   onSelect: (id: string) => void;
+  onOpenSettings: () => void;
 }
 
 interface ReceiptProps extends CommonProps {
@@ -36,8 +37,13 @@ type Props = ReceiptProps | SummaryProps | LoadingProps;
 
 type SummaryViewMode = "table" | "receipt";
 
-const ITEM_WIDTH = 70; // Approximate width per nav item in pixels
+const ITEM_WIDTH = 70;
 const OVERFLOW_BUTTON_WIDTH = 40;
+
+// Shared menu styles
+const menuPopupClassName = "menu-popup bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl shadow-lg shadow-black/5 dark:shadow-black/20 py-1.5";
+const menuItemClassName = "menu-item mx-1.5 px-2.5 py-1.5 text-sm cursor-pointer rounded-lg outline-none text-[var(--color-text-muted)] flex items-center gap-2.5 select-none";
+const menuTriggerClassName = "p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)]";
 
 export function MainPanel(props: Props) {
   const [summaryViewMode, setSummaryViewMode] = useState<SummaryViewMode>("table");
@@ -69,16 +75,49 @@ export function MainPanel(props: Props) {
       {/* Header */}
       <header className="h-12 px-6 flex items-center justify-between flex-shrink-0 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-6 min-w-0 flex-1">
+          {/* Hamburger Menu */}
+          <Menu.Root>
+            <Menu.Trigger className={`${menuTriggerClassName} -ml-1.5`}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M2 4h12M2 8h12M2 12h12" />
+              </svg>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner className="z-50" sideOffset={8}>
+                <Menu.Popup className={`${menuPopupClassName} min-w-[180px]`}>
+                  <Menu.Item
+                    onClick={props.onOpenSettings}
+                    className={menuItemClassName}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.25" className="opacity-60">
+                      <circle cx="7.5" cy="7.5" r="2.5" />
+                      <path d="M7.5 1v2M7.5 12v2M1 7.5h2M12 7.5h2M3 3l1.5 1.5M10.5 10.5L12 12M3 12l1.5-1.5M10.5 4.5L12 3" />
+                    </svg>
+                    Settings
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => window.open("https://github.com/brianlovin/tax-return-ui", "_blank")}
+                    className={menuItemClassName}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="currentColor" className="opacity-60">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M7.5 0C3.35 0 0 3.35 0 7.5c0 3.32 2.15 6.14 5.13 7.13.38.07.51-.16.51-.36 0-.18-.01-.65-.01-.65-2.09.45-2.53-1.01-2.53-1.01-.34-.87-.84-1.1-.84-1.1-.68-.46.05-.46.05-.46.76.05 1.16.78 1.16.78.67 1.15 1.77.82 2.2.62.07-.48.26-.82.47-1.01-1.67-.19-3.43-.84-3.43-3.72 0-.82.3-1.5.78-2.02-.08-.19-.34-.96.07-2 0 0 .64-.2 2.08.77a7.24 7.24 0 013.78 0c1.44-.98 2.08-.77 2.08-.77.42 1.04.15 1.81.07 2 .49.52.78 1.2.78 2.02 0 2.89-1.76 3.53-3.44 3.71.27.24.51.69.51 1.39 0 1.01-.01 1.82-.01 2.07 0 .2.14.44.52.36A7.51 7.51 0 0015 7.5C15 3.35 11.65 0 7.5 0z" />
+                    </svg>
+                    Contribute
+                  </Menu.Item>
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
           <span className="text-sm font-medium flex-shrink-0">Taxes</span>
-          <nav ref={navRef} className="flex items-center gap-1 flex-1 min-w-0">
+          <nav ref={navRef} className="flex items-center gap-0.5 flex-1 min-w-0">
             {visibleItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => props.onSelect(item.id)}
-                className={`px-2 py-1 text-sm flex-shrink-0 ${
+                className={`px-2.5 py-1 text-sm rounded-lg flex-shrink-0 ${
                   props.selectedId === item.id
-                    ? "text-[var(--color-text)]"
-                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                    ? "text-[var(--color-text)] bg-[var(--color-bg-muted)]"
+                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)]"
                 }`}
               >
                 {item.label}
@@ -86,20 +125,20 @@ export function MainPanel(props: Props) {
             ))}
             {hasOverflow && (
               <Menu.Root>
-                <Menu.Trigger className="px-2 py-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] flex-shrink-0">
+                <Menu.Trigger className={`${menuTriggerClassName} px-2.5 py-1 text-sm`}>
                   ···
                 </Menu.Trigger>
                 <Menu.Portal>
-                  <Menu.Positioner className="z-50">
-                    <Menu.Popup className="bg-[var(--color-bg)] border border-[var(--color-border)] shadow-lg py-1 min-w-[120px]">
+                  <Menu.Positioner className="z-50" sideOffset={8}>
+                    <Menu.Popup className={`${menuPopupClassName} min-w-[100px]`}>
                       {overflowItems.map((item) => (
                         <Menu.Item
                           key={item.id}
                           onClick={() => props.onSelect(item.id)}
-                          className={`px-3 py-1.5 text-sm cursor-pointer hover:bg-[var(--color-bg-muted)] outline-none ${
+                          className={`${menuItemClassName} ${
                             props.selectedId === item.id
-                              ? "text-[var(--color-text)]"
-                              : "text-[var(--color-text-muted)]"
+                              ? "text-[var(--color-text)] font-medium"
+                              : ""
                           }`}
                         >
                           {item.label}
@@ -115,7 +154,7 @@ export function MainPanel(props: Props) {
         {!props.isChatOpen && (
           <button
             onClick={props.onToggleChat}
-            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] flex-shrink-0"
+            className="px-2.5 py-1 text-sm rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] flex-shrink-0"
           >
             Chat
           </button>

@@ -28,6 +28,9 @@
 
     /* Row hover */
     --color-row-hover: #fafafa;
+
+    /* Dialog overlay */
+    --color-overlay: rgba(255, 255, 255, 0.7);
   }
 
   .dark {
@@ -48,6 +51,9 @@
     --color-score: #4ade80;
 
     --color-row-hover: #151515;
+
+    /* Dialog overlay */
+    --color-overlay: rgba(0, 0, 0, 0.6);
   }
 
   html {
@@ -122,4 +128,91 @@
 
 .animate-pulse-soft {
   animation: pulseSoft 2s ease-in-out infinite;
+}
+
+/* Dialog animations */
+@keyframes dialogBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dialogPopupIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes dialogPopupOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.dialog-backdrop {
+  animation: dialogBackdropIn 0.15s ease-out forwards;
+}
+
+.dialog-backdrop[data-ending-style] {
+  animation: dialogBackdropOut 0.1s ease-in forwards;
+}
+
+.dialog-popup {
+  animation: dialogPopupIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dialog-popup[data-ending-style] {
+  animation: dialogPopupOut 0.1s ease-in forwards;
+}
+
+/* Menu animations */
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menuOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.menu-popup {
+  transform-origin: var(--transform-origin);
+  animation: menuIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.menu-popup[data-ending-style] {
+  animation: menuOut 0.1s ease-in forwards;
+}
+
+/* Menu item highlight state */
+.menu-item[data-highlighted] {
+  background-color: var(--color-bg-muted);
+  color: var(--color-text);
 }

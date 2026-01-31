@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { Dialog } from "@base-ui/react/dialog";
+import { Button } from "./Button";
 
 interface Props {
   isOpen: boolean;
@@ -107,134 +109,139 @@ export function UploadModal({ isOpen, onClose, onUpload, onSaveApiKey, hasStored
     }
   }
 
-  function handleBackdropClick(e: React.MouseEvent) {
-    if (e.target === e.currentTarget && !isLoading) {
+  function handleClose() {
+    if (!isLoading) {
+      setFiles([]);
+      setApiKey("");
+      setError(null);
       onClose();
     }
   }
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 bg-black/20 flex items-center justify-center p-4 z-50 animate-fade-in"
-      onClick={handleBackdropClick}
-    >
-      <div className="bg-[var(--color-bg)] border border-[var(--color-border)] max-w-md w-full p-6">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-sm font-medium">
-            {configureKeyOnly ? "API Key" : pendingFiles.length > 0 ? "Enter API Key" : "Upload Tax Return"}
-          </h2>
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-50"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Pending files indicator */}
-        {pendingFiles.length > 0 && (
-          <div className="mb-4 text-sm">
-            <div className="text-[var(--color-text-muted)]">
-              {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} selected
-            </div>
-            <div className="text-xs text-[var(--color-text-muted)] mt-1">
-              {pendingFiles.map((f, i) => (
-                <div key={i} className="truncate">{f.name}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* API Key input */}
-        {(!hasStoredKey || configureKeyOnly) && (
-          <div className="mb-4">
-            <label className="block text-xs text-[var(--color-text-muted)] mb-1">
-              Anthropic API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-ant-..."
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="dialog-backdrop fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-[2px] z-40" />
+        <Dialog.Popup className="dialog-popup fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[var(--color-bg)] border border-[var(--color-border)] rounded-2xl shadow-2xl p-6">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-6">
+            <Dialog.Title className="text-base font-medium">
+              {configureKeyOnly ? "API Key" : pendingFiles.length > 0 ? "Enter API Key" : "Upload Tax Return"}
+            </Dialog.Title>
+            <Dialog.Close
               disabled={isLoading}
-              className="w-full px-3 py-2 border border-[var(--color-border)] bg-[var(--color-bg)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-text-muted)] disabled:opacity-50"
-            />
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              Saved locally to .env file
-            </p>
+              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded-lg hover:bg-[var(--color-bg-muted)] disabled:opacity-50"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </Dialog.Close>
           </div>
-        )}
 
-        {/* File upload area */}
-        {showFileUpload && (
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => !isLoading && fileInputRef.current?.click()}
-            className={[
-              "border border-dashed p-6 text-center cursor-pointer text-sm",
-              isDragging
-                ? "border-[var(--color-text-muted)] bg-[var(--color-bg-muted)]"
-                : "border-[var(--color-border)] hover:border-[var(--color-text-muted)]",
-              isLoading ? "opacity-50 cursor-not-allowed" : "",
-            ].join(" ")}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              multiple
-              onChange={handleFileSelect}
-              disabled={isLoading}
-              className="hidden"
-            />
-            {files.length > 0 ? (
-              <div>
-                <div>{files.length} file{files.length > 1 ? "s" : ""} selected</div>
-                <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                  {files.map((f, i) => (
-                    <div key={i} className="truncate">{f.name}</div>
-                  ))}
-                </div>
-              </div>
-            ) : (
+          {/* Pending files indicator */}
+          {pendingFiles.length > 0 && (
+            <div className="mb-4 text-sm">
               <div className="text-[var(--color-text-muted)]">
-                Drop PDF files here or click to browse
+                {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} selected
               </div>
-            )}
-          </div>
-        )}
+              <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                {pendingFiles.map((f, i) => (
+                  <div key={i} className="truncate">{f.name}</div>
+                ))}
+              </div>
+            </div>
+          )}
 
-        {/* Error message */}
-        {error && (
-          <div className="mt-4 text-sm text-[var(--color-negative)]">
-            {error}
-          </div>
-        )}
+          {/* API Key input */}
+          {(!hasStoredKey || configureKeyOnly) && (
+            <div className="mb-4">
+              <label className="block text-xs text-[var(--color-text-muted)] mb-1.5">
+                Anthropic API Key
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-ant-..."
+                disabled={isLoading}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                className="w-full px-3 py-2 border border-[var(--color-border)] bg-[var(--color-bg-muted)] rounded-lg text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-text-muted)] disabled:opacity-50"
+              />
+              <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
+                Saved locally to .env file
+              </p>
+            </div>
+          )}
 
-        {/* Privacy note */}
-        {!configureKeyOnly && (
-          <div className="mt-4 text-xs text-[var(--color-text-muted)]">
-            Your tax return is sent directly to Anthropic's API. Data stored locally.
-          </div>
-        )}
+          {/* File upload area */}
+          {showFileUpload && (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !isLoading && fileInputRef.current?.click()}
+              className={[
+                "border border-dashed rounded-xl p-6 text-center cursor-pointer text-sm transition-colors",
+                isDragging
+                  ? "border-[var(--color-text-muted)] bg-[var(--color-bg-muted)]"
+                  : "border-[var(--color-border)] hover:border-[var(--color-text-muted)]",
+                isLoading ? "opacity-50 cursor-not-allowed" : "",
+              ].join(" ")}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                multiple
+                onChange={handleFileSelect}
+                disabled={isLoading}
+                className="hidden"
+              />
+              {files.length > 0 ? (
+                <div>
+                  <div>{files.length} file{files.length > 1 ? "s" : ""} selected</div>
+                  <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                    {files.map((f, i) => (
+                      <div key={i} className="truncate">{f.name}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[var(--color-text-muted)]">
+                  Drop PDF files here or click to browse
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Submit button */}
-        <button
-          onClick={handleSubmit}
-          disabled={isLoading || (configureKeyOnly ? !apiKey.trim() : (needsApiKey || activeFiles.length === 0))}
-          className="mt-4 w-full py-2 bg-[var(--color-text)] text-[var(--color-bg)] text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-80"
-        >
-          {isLoading
-            ? (configureKeyOnly ? "Saving..." : "Processing...")
-            : (configureKeyOnly ? "Save API Key" : `Parse ${activeFiles.length > 1 ? `${activeFiles.length} Returns` : "Tax Return"}`)}
-        </button>
-      </div>
-    </div>
+          {/* Error message */}
+          {error && (
+            <div className="mt-4 text-sm text-[var(--color-negative)]">
+              {error}
+            </div>
+          )}
+
+          {/* Privacy note */}
+          {!configureKeyOnly && (
+            <div className="mt-4 text-xs text-[var(--color-text-muted)]">
+              Your tax return is sent directly to Anthropic's API. Data stored locally.
+            </div>
+          )}
+
+          {/* Submit button */}
+          <Button
+            onClick={handleSubmit}
+            disabled={isLoading || (configureKeyOnly ? !apiKey.trim() : (needsApiKey || activeFiles.length === 0))}
+            className="mt-4 w-full"
+          >
+            {isLoading
+              ? (configureKeyOnly ? "Saving..." : "Processing...")
+              : (configureKeyOnly ? "Save API Key" : `Parse ${activeFiles.length > 1 ? `${activeFiles.length} Returns` : "Tax Return"}`)}
+          </Button>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

@@ -143,7 +143,7 @@ export function SummaryReceiptView({ returns }: Props) {
           <button
             key={unit}
             onClick={() => setTimeUnit(unit)}
-            className={`px-2 py-0.5 text-xs border transition-colors ${
+            className={`px-2.5 py-1 text-xs rounded-lg border ${
               timeUnit === unit
                 ? "border-[var(--color-text)] bg-[var(--color-text)] text-[var(--color-bg)]"
                 : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
