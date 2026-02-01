@@ -74,7 +74,7 @@ export function MainPanel(props: Props) {
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--color-bg)]">
       {/* Header */}
-      <header className="h-12 px-6 flex items-center justify-between flex-shrink-0 border-b border-[var(--color-border)]">
+      <header className="h-12 pl-6 pr-3 flex items-center justify-between flex-shrink-0 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-6 min-w-0 flex-1">
           {/* Hamburger Menu */}
           <Menu.Root>
@@ -90,8 +90,8 @@ export function MainPanel(props: Props) {
                     onClick={props.onOpenStart}
                     className={menuItemClassName}
                   >
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.25" className="opacity-60">
-                      <path d="M4 2l9 5.5L4 13V2z" />
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="opacity-60">
+                      <path d="M2.5 1.5a1 1 0 0 1 1.5-.86l7 4a1 1 0 0 1 0 1.72l-7 4A1 1 0 0 1 2.5 9.5v-8z" />
                     </svg>
                     Start
                   </Menu.Item>
@@ -113,7 +113,7 @@ export function MainPanel(props: Props) {
               <button
                 key={item.id}
                 onClick={() => props.onSelect(item.id)}
-                className={`px-2.5 py-1 text-sm rounded-lg flex-shrink-0 ${
+                className={`px-2.5 py-1 text-sm font-medium rounded-lg flex-shrink-0 ${
                   props.selectedId === item.id
                     ? "text-[var(--color-text)] bg-[var(--color-bg-muted)]"
                     : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)]"
@@ -122,9 +122,19 @@ export function MainPanel(props: Props) {
                 {item.label}
               </button>
             ))}
+            {/* Add button */}
+            <button
+              onClick={props.onOpenStart}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] flex-shrink-0"
+              title="Add tax returns"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.25">
+                <path d="M6 1v10M1 6h10" />
+              </svg>
+            </button>
             {hasOverflow && (
               <Menu.Root>
-                <Menu.Trigger className={`${menuTriggerClassName} px-2.5 py-1 text-sm`}>
+                <Menu.Trigger className={`${menuTriggerClassName} px-2.5 py-1 text-sm font-medium`}>
                   ···
                 </Menu.Trigger>
                 <Menu.Portal>
@@ -153,7 +163,7 @@ export function MainPanel(props: Props) {
         {!props.isChatOpen && (
           <button
             onClick={props.onToggleChat}
-            className="px-2.5 py-1 text-sm rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] flex-shrink-0"
+            className="px-2.5 py-1 text-sm font-medium rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-muted)] flex-shrink-0"
           >
             Chat
           </button>

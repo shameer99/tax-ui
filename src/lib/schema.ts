@@ -73,3 +73,11 @@ export interface PendingUpload {
   status: "extracting-year" | "parsing";
   file: File;
 }
+
+export interface FileProgress {
+  id: string;
+  filename: string;
+  status: "pending" | "parsing" | "complete" | "error";
+  year?: number;
+  error?: string;
+}

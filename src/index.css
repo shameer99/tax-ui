@@ -216,3 +216,50 @@
   background-color: var(--color-bg-muted);
   color: var(--color-text);
 }
+
+/* Minimal chat prose */
+.prose-chat p {
+  margin: 0.5em 0;
+}
+
+.prose-chat p:first-child {
+  margin-top: 0;
+}
+
+.prose-chat p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat ul,
+.prose-chat ol {
+  margin: 0.5em 0;
+  padding-left: 1.25em;
+}
+
+.prose-chat li {
+  margin: 0.25em 0;
+}
+
+/* Reset code styles inside pre (code blocks) */
+.prose-chat pre .prose-code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+/* Get started pill */
+.get-started-pill {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  animation: pillEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pillEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

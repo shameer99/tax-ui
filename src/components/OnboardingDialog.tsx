@@ -1,8 +1,10 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Accordion } from "@base-ui/react/accordion";
 import { Input } from "@base-ui/react/input";
 import { Button } from "./Button";
+import { BrailleSpinner } from "./BrailleSpinner";
+import type { FileProgress } from "../lib/schema";
 
 const AI_PRIVACY_PROMPT = `I want you to perform a security and privacy audit of TaxUI, an open source tax return parser.
 
@@ -41,17 +43,99 @@ interface Props {
   isDemo: boolean;
   onUpload: (files: File[], apiKey: string) => Promise<void>;
   onClose: () => void;
+  isProcessing?: boolean;
+  fileProgress?: FileProgress[];
+  hasStoredKey?: boolean;
+  existingYears?: number[];
 }
 
-export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
+interface FileWithYear {
+  id: string;
+  file: File;
+  year: number | null;
+  isExtracting: boolean;
+  isDuplicate: boolean;
+}
+
+export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose, isProcessing, fileProgress, hasStoredKey, existingYears = [] }: Props) {
   const [apiKey, setApiKey] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<FileWithYear[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [hasScrollOverflow, setHasScrollOverflow] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear files when dialog opens fresh (not during processing)
+  useEffect(() => {
+    if (isOpen && !isProcessing) {
+      setFiles([]);
+      setError(null);
+    }
+  }, [isOpen, isProcessing]);
+
+  // Extract year from a single file using the API
+  async function extractYearFromFile(file: File, key: string): Promise<number | null> {
+    try {
+      const formData = new FormData();
+      formData.append("pdf", file);
+      if (key) formData.append("apiKey", key);
+      const res = await fetch("/api/extract-year", { method: "POST", body: formData });
+      const data = await res.json();
+      return data.year ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Check if a year is a duplicate (exists in existingYears or in other files being uploaded)
+  function checkDuplicate(year: number | null, fileIndex: number, fileList: FileWithYear[] = files): boolean {
+    if (year == null) return false;
+    if (existingYears.includes(year)) return true;
+    for (let i = 0; i < fileIndex; i++) {
+      if (fileList[i]?.year === year) return true;
+    }
+    return false;
+  }
+
+  // Add files and extract years
+  async function addFiles(newFiles: File[]) {
+    const key = hasStoredKey ? "" : apiKey.trim();
+    const canExtract = !!key || !!hasStoredKey;
+
+    const newFileEntries: FileWithYear[] = newFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      year: null,
+      isExtracting: canExtract,
+      isDuplicate: false,
+    }));
+
+    setFiles((prev) => [...prev, ...newFileEntries]);
+
+    if (!canExtract) return;
+
+    // Extract years in parallel, updating by ID to avoid race conditions
+    await Promise.all(
+      newFileEntries.map(async (entry) => {
+        const year = await extractYearFromFile(entry.file, key);
+        setFiles((prev) => {
+          const updated = [...prev];
+          const idx = updated.findIndex((f) => f.id === entry.id);
+          if (idx !== -1) {
+            const isDuplicate = checkDuplicate(year, idx, updated);
+            updated[idx] = { ...updated[idx]!, year, isExtracting: false, isDuplicate };
+          }
+          // Recheck duplicates for all files
+          return updated.map((f, i) => ({
+            ...f,
+            isDuplicate: f.year !== null ? checkDuplicate(f.year, i, updated) : false,
+          }));
+        });
+      })
+    );
+  }
 
   const handleScrollRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
@@ -100,7 +184,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
       (f) => f.type === "application/pdf"
     );
     if (droppedFiles.length > 0) {
-      setFiles((prev) => [...prev, ...droppedFiles]);
+      addFiles(droppedFiles);
     } else {
       setError("Please upload PDF files");
     }
@@ -112,18 +196,29 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
       (f) => f.type === "application/pdf"
     );
     if (selectedFiles.length > 0) {
-      setFiles((prev) => [...prev, ...selectedFiles]);
+      addFiles(selectedFiles);
     } else if (e.target.files?.length) {
       setError("Please upload PDF files");
+    }
+    // Reset the input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
   function handleRemoveFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      // Recheck duplicates after removal
+      return updated.map((f, i) => ({
+        ...f,
+        isDuplicate: checkDuplicate(f.year, i),
+      }));
+    });
   }
 
   async function handleSubmit() {
-    if (!apiKey.trim()) {
+    if (!hasStoredKey && !apiKey.trim()) {
       setError("Please enter your API key");
       return;
     }
@@ -136,13 +231,34 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
     setError(null);
 
     try {
-      await onUpload(files, apiKey.trim());
+      await onUpload(files.map((f) => f.file), apiKey.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process PDFs");
     } finally {
       setIsLoading(false);
     }
   }
+
+  // Computed values for UI
+  const processingCount = fileProgress?.filter((f) => f.status === "parsing").length ?? 0;
+  const completedCount = fileProgress?.filter((f) => f.status === "complete").length ?? 0;
+  const totalCount = fileProgress?.length ?? 0;
+  const currentIndex = completedCount + processingCount;
+  const showProcessingUI = isProcessing && fileProgress && fileProgress.length > 0;
+
+  const nonDuplicateCount = files.filter((f) => !f.isDuplicate).length;
+  const duplicateCount = files.filter((f) => f.isDuplicate).length;
+  const isExtracting = files.some((f) => f.isExtracting);
+
+  function getButtonText(): string {
+    if (isProcessing) return `Processing ${currentIndex} of ${totalCount}...`;
+    if (isLoading) return "Processing...";
+    if (isExtracting) return "Checking...";
+    if (duplicateCount > 0 && nonDuplicateCount === 0) return "Reprocess";
+    return "Process";
+  }
+
+  const isSubmitDisabled = isLoading || isProcessing || isExtracting || (!hasStoredKey && !apiKey.trim()) || files.length === 0;
 
   // Demo mode: show instructions for running locally
   if (isDemo) {
@@ -210,7 +326,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
               </div>
 
               {/* Browse demo button */}
-              <Button onClick={onClose} className="w-full">
+              <Button onClick={onClose} variant="secondary" className="w-full">
                 Browse Demo
               </Button>
             </div>
@@ -221,9 +337,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                 <Accordion.Item value="data-safe">
                   <Accordion.Header>
                     <Accordion.Trigger className="w-full text-sm font-medium cursor-pointer flex items-center justify-between py-2 group focus:outline-none">
-                      <span>Is my data safe?</span>
+                      <span>How data is processed</span>
                       <svg
-                        className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-180 transition-transform"
+                        className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-90 transition-transform"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -232,7 +348,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
+                          d="M9 5l7 7-7 7"
                         />
                       </svg>
                     </Accordion.Trigger>
@@ -260,9 +376,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                 <Accordion.Item value="how-sure">
                   <Accordion.Header>
                     <Accordion.Trigger className="w-full text-sm font-medium cursor-pointer flex items-center justify-between py-2 group focus:outline-none">
-                      <span>How can I be sure?</span>
+                      <span>Ask AI about privacy and security</span>
                       <svg
-                        className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-180 transition-transform"
+                        className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-90 transition-transform"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -271,7 +387,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
+                          d="M9 5l7 7-7 7"
                         />
                       </svg>
                     </Accordion.Trigger>
@@ -301,7 +417,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
 
   // Local mode: show API key input and upload
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && !isProcessing && onClose()}>
       <Dialog.Portal>
         <Dialog.Backdrop className="dialog-backdrop fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-[2px] z-40" />
         <Dialog.Popup className="dialog-popup fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-[var(--color-bg)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-h-[90vh] flex flex-col focus:outline-none">
@@ -310,112 +426,174 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
             {/* Header with close button */}
             <div className="flex items-start justify-between mb-6">
               <div>
-                <Dialog.Title className="text-xl font-semibold">TaxUI</Dialog.Title>
+                <Dialog.Title className="text-xl font-semibold">
+                  {hasStoredKey ? "Add Tax Returns" : "TaxUI"}
+                </Dialog.Title>
                 <p className="text-sm text-[var(--color-text-muted)] mt-2">
-                  Parse and analyze your tax returns with AI
+                  {hasStoredKey
+                    ? "Upload more tax return PDFs to analyze"
+                    : "Parse and analyze your tax returns with AI"}
                 </p>
               </div>
-              <Dialog.Close className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded-lg hover:bg-[var(--color-bg-muted)] focus:outline-none">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M4 4l8 8M12 4l-8 8" />
-                </svg>
-              </Dialog.Close>
+              {!isProcessing && (
+                <Dialog.Close className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded-lg hover:bg-[var(--color-bg-muted)] focus:outline-none">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M4 4l8 8M12 4l-8 8" />
+                  </svg>
+                </Dialog.Close>
+              )}
             </div>
 
-            {/* API Key Section */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">
-                Anthropic API Key
-              </label>
-              <Input
-                autoFocus
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-ant-..."
-                disabled={isLoading}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                className="w-full px-3 py-2.5 border border-[var(--color-border)] bg-[var(--color-bg-muted)] rounded-lg text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-text-muted)] disabled:opacity-50"
-              />
-              <p className="text-xs text-[var(--color-text-muted)] mt-2">
-                Get your API key from{" "}
-                <a
-                  href="https://console.anthropic.com/settings/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-[var(--color-text)]"
-                >
-                  console.anthropic.com
-                </a>
-              </p>
-            </div>
+            {/* API Key Section - only show if no stored key */}
+            {!hasStoredKey && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">
+                  Anthropic API Key
+                </label>
+                <Input
+                  autoFocus
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-ant-..."
+                  disabled={isLoading || isProcessing}
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  className="w-full px-3 py-2.5 border border-[var(--color-border)] bg-[var(--color-bg-muted)] rounded-lg text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-text-muted)] disabled:opacity-50"
+                />
+                <p className="text-xs text-[var(--color-text-muted)] mt-2">
+                  Get your API key from{" "}
+                  <a
+                    href="https://console.anthropic.com/settings/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-[var(--color-text)]"
+                  >
+                    console.anthropic.com
+                  </a>
+                </p>
+              </div>
+            )}
 
-            {/* Upload Section */}
+            {/* Upload Section - hide drop zone when processing */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">
                 Tax Return PDFs
               </label>
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => !isLoading && fileInputRef.current?.click()}
-                className={[
-                  "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors",
-                  isDragging
-                    ? "border-[var(--color-text-muted)] bg-[var(--color-bg-muted)]"
-                    : "border-[var(--color-border)] hover:border-[var(--color-text-muted)]",
-                  isLoading ? "opacity-50 cursor-not-allowed" : "",
-                ].join(" ")}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  multiple
-                  onChange={handleFileSelect}
-                  disabled={isLoading}
-                  className="hidden"
-                />
-                <div className="text-[var(--color-text-muted)]">
-                  <svg
-                    className="w-10 h-10 mx-auto mb-3 opacity-50"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                    />
-                  </svg>
-                  <p className="text-sm">Drop PDF files here or click to browse</p>
-                  <p className="text-xs mt-1 opacity-70">
-                    Supports multiple files
-                  </p>
+              {!showProcessingUI && (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => !isLoading && !isProcessing && fileInputRef.current?.click()}
+                  className={[
+                    "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors",
+                    isDragging
+                      ? "border-[var(--color-text-muted)] bg-[var(--color-bg-muted)]"
+                      : "border-[var(--color-border)] hover:border-[var(--color-text-muted)]",
+                    isLoading || isProcessing ? "opacity-50 cursor-not-allowed" : "",
+                  ].join(" ")}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    multiple
+                    onChange={handleFileSelect}
+                    disabled={isLoading || isProcessing}
+                    className="hidden"
+                  />
+                  <div className="text-[var(--color-text-muted)]">
+                    <svg
+                      className="w-10 h-10 mx-auto mb-3 opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    <p className="text-sm">Drop PDF files here or click to browse</p>
+                    <p className="text-xs mt-1 opacity-70">
+                      Supports multiple files
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Selected files list */}
-              {files.length > 0 && (
+              {/* File progress list during processing */}
+              {showProcessingUI && (
+                <div className="space-y-2">
+                  {fileProgress.map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-2 text-sm bg-[var(--color-bg-muted)] rounded-lg px-3 py-2"
+                    >
+                      <span className="truncate flex-1">{file.filename}</span>
+                      {file.status === "pending" && (
+                        <span className="text-[var(--color-text-muted)]">Waiting</span>
+                      )}
+                      {file.status === "parsing" && <BrailleSpinner />}
+                      {file.status === "complete" && (
+                        <svg
+                          className="w-4 h-4 text-[var(--color-positive)]"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                      {file.status === "error" && (
+                        <span className="text-[var(--color-negative)]">Failed</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected files list (before processing) */}
+              {!showProcessingUI && files.length > 0 && (
                 <div className="mt-3 space-y-1">
-                  {files.map((file, i) => (
+                  {files.map((fileEntry, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between text-sm bg-[var(--color-bg-muted)] rounded-lg px-3 py-2"
+                      className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${
+                        fileEntry.isDuplicate
+                          ? "bg-[var(--color-negative)]/10 border border-[var(--color-negative)]/20"
+                          : "bg-[var(--color-bg-muted)]"
+                      }`}
                     >
-                      <span className="truncate">{file.name}</span>
+                      <span className="truncate flex-1">{fileEntry.file.name}</span>
+                      {fileEntry.isExtracting && (
+                        <BrailleSpinner className="text-[var(--color-text-muted)]" />
+                      )}
+                      {!fileEntry.isExtracting && fileEntry.year !== null && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          fileEntry.isDuplicate
+                            ? "bg-[var(--color-negative)]/20 text-[var(--color-negative)]"
+                            : "bg-[var(--color-bg)] text-[var(--color-text-muted)]"
+                        }`}>
+                          {fileEntry.isDuplicate ? "Reprocess" : fileEntry.year}
+                        </span>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveFile(i);
                         }}
                         disabled={isLoading}
-                        className="ml-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-50"
+                        className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-50"
                       >
                         <svg
                           width="14"
@@ -444,10 +622,10 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
             {/* Submit button */}
             <Button
               onClick={handleSubmit}
-              disabled={isLoading || !apiKey.trim() || files.length === 0}
+              disabled={isSubmitDisabled}
               className="w-full"
             >
-              {isLoading ? "Processing..." : "Start"}
+              {getButtonText()}
             </Button>
           </div>
 
@@ -457,9 +635,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
               <Accordion.Item value="data-safe">
                 <Accordion.Header>
                   <Accordion.Trigger className="w-full text-sm font-medium cursor-pointer flex items-center justify-between py-2 group focus:outline-none">
-                    <span>Is my data safe?</span>
+                    <span>How data is processed</span>
                     <svg
-                      className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-180 transition-transform"
+                      className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-90 transition-transform"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -468,7 +646,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
+                        d="M9 5l7 7-7 7"
                       />
                     </svg>
                   </Accordion.Trigger>
@@ -497,9 +675,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
               <Accordion.Item value="how-sure">
                 <Accordion.Header>
                   <Accordion.Trigger className="w-full text-sm font-medium cursor-pointer flex items-center justify-between py-2 group focus:outline-none">
-                    <span>How can I be sure?</span>
+                    <span>Ask AI about privacy and security</span>
                     <svg
-                      className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-180 transition-transform"
+                      className="w-4 h-4 text-[var(--color-text-muted)] group-data-[panel-open]:rotate-90 transition-transform"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -508,7 +686,7 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose }: Props) {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
+                        d="M9 5l7 7-7 7"
                       />
                     </svg>
                   </Accordion.Trigger>

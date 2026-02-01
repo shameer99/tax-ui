@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { TaxReturn, PendingUpload } from "./lib/schema";
+import type { TaxReturn, PendingUpload, FileProgress } from "./lib/schema";
 import type { NavItem } from "./lib/types";
 import { sampleReturns } from "./data/sampleData";
 import { MainPanel } from "./components/MainPanel";
@@ -57,6 +57,17 @@ function parseSelectedId(id: string): SelectedView {
   return Number(id);
 }
 
+function cycleDemoOverride(current: boolean | null): boolean | null {
+  if (current === null) return true;
+  if (current === true) return false;
+  return null;
+}
+
+function getDemoOverrideLabel(value: boolean | null): string {
+  if (value === null) return "demo: auto";
+  return value ? "demo: on" : "demo: off";
+}
+
 export function App() {
   const [state, setState] = useState<AppState>({
     returns: sampleReturns,
@@ -83,11 +94,18 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [isOnboardingProcessing, setIsOnboardingProcessing] = useState(false);
+  const [onboardingProgress, setOnboardingProgress] = useState<FileProgress[]>([]);
   const [isDark, setIsDark] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
   );
 
-  const navItems = buildNavItems(state.returns);
+  // Compute effective demo mode early (dev override takes precedence)
+  const effectiveIsDemo = devDemoOverride !== null ? devDemoOverride : state.isDemo;
+
+  // When demo mode is toggled on, show sample data instead of user data
+  const effectiveReturns = effectiveIsDemo ? sampleReturns : state.returns;
+  const navItems = buildNavItems(effectiveReturns);
 
   useEffect(() => {
     fetchInitialState()
@@ -128,7 +146,7 @@ export function App() {
       if (state.isDev && e.key === "D" && e.shiftKey) {
         e.preventDefault();
         setDevDemoOverride((prev) => {
-          const newValue = prev === null ? true : prev === true ? false : null;
+          const newValue = cycleDemoOverride(prev);
           if (newValue === null) {
             localStorage.removeItem(DEV_DEMO_OVERRIDE_KEY);
           } else {
@@ -172,7 +190,7 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  async function processUpload(file: File, apiKey: string) {
+  async function processUpload(file: File, apiKey: string): Promise<TaxReturn> {
     const formData = new FormData();
     formData.append("pdf", file);
     if (apiKey) formData.append("apiKey", apiKey);
@@ -195,6 +213,8 @@ export function App() {
       // Stay on summary if already there, otherwise navigate to new year
       selectedYear: s.selectedYear === "summary" ? "summary" : taxReturn.year,
     }));
+
+    return taxReturn;
   }
 
   async function handleUploadFromSidebar(files: File[]) {
@@ -361,12 +381,9 @@ export function App() {
   }
   const selectedId = getSelectedId();
 
-  // Compute effective demo mode (dev override takes precedence)
-  const effectiveIsDemo = devDemoOverride !== null ? devDemoOverride : state.isDemo;
-
   function getReceiptData(): TaxReturn | null {
     if (typeof state.selectedYear === "number") {
-      return state.returns[state.selectedYear] || null;
+      return effectiveReturns[state.selectedYear] || null;
     }
     return null;
   }
@@ -386,7 +403,7 @@ export function App() {
       return <MainPanel view="loading" pendingUpload={selectedPendingUpload} {...commonProps} />;
     }
     if (state.selectedYear === "summary") {
-      return <MainPanel view="summary" returns={state.returns} {...commonProps} />;
+      return <MainPanel view="summary" returns={effectiveReturns} {...commonProps} />;
     }
     const receiptData = getReceiptData();
     if (receiptData) {
@@ -399,7 +416,7 @@ export function App() {
         />
       );
     }
-    return <MainPanel view="summary" returns={state.returns} {...commonProps} />;
+    return <MainPanel view="summary" returns={effectiveReturns} {...commonProps} />;
   }
 
   // Find pending upload if selected
@@ -409,16 +426,72 @@ export function App() {
       : null;
 
   // Show onboarding dialog for new users (unless dismissed) or when manually opened
-  const showOnboarding = isOnboardingOpen || (!onboardingDismissed && !state.hasStoredKey && !state.hasUserData);
+  // Processing takes precedence - keep dialog open while processing
+  const showOnboarding = isOnboardingProcessing || isOnboardingOpen || (!onboardingDismissed && !state.hasStoredKey && !state.hasUserData);
+
+  function getPostUploadNavigation(
+    existingYears: number[],
+    uploadedYears: number[],
+    batchSize: number
+  ): SelectedView {
+    if (uploadedYears.length === 0) return "summary"; // all failed
+    if (batchSize === 1) return uploadedYears[0]!;    // single file -> that year
+    return "summary";                                  // multiple files -> summary
+  }
 
   async function handleOnboardingUpload(files: File[], apiKey: string) {
-    // Save API key first
-    await handleSaveApiKey(apiKey);
-    // Then process uploads
-    for (const file of files) {
-      await processUpload(file, apiKey);
+    setIsOnboardingProcessing(true);
+    const existingYears = Object.keys(state.returns).map(Number);
+
+    // Initialize progress
+    const progress: FileProgress[] = files.map((f) => ({
+      id: crypto.randomUUID(),
+      filename: f.name,
+      status: "pending" as const,
+    }));
+    setOnboardingProgress(progress);
+
+    // Save API key if needed
+    if (!state.hasStoredKey && apiKey) {
+      await handleSaveApiKey(apiKey);
     }
+
+    // Process files with progress updates
+    const uploadedYears: number[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
+      const id = progress[i]!.id;
+
+      setOnboardingProgress((p) =>
+        p.map((f) => (f.id === id ? { ...f, status: "parsing" } : f))
+      );
+
+      try {
+        const taxReturn = await processUpload(file, apiKey);
+        uploadedYears.push(taxReturn.year);
+        setOnboardingProgress((p) =>
+          p.map((f) =>
+            f.id === id ? { ...f, status: "complete", year: taxReturn.year } : f
+          )
+        );
+      } catch (err) {
+        setOnboardingProgress((p) =>
+          p.map((f) =>
+            f.id === id
+              ? { ...f, status: "error", error: err instanceof Error ? err.message : "Failed" }
+              : f
+          )
+        );
+      }
+    }
+
+    // Smart routing
+    const nav = getPostUploadNavigation(existingYears, uploadedYears, files.length);
+    setState((s) => ({ ...s, selectedYear: nav }));
+
+    setIsOnboardingProcessing(false);
     setIsOnboardingOpen(false);
+    setOnboardingProgress([]);
   }
 
   function handleOnboardingClose() {
@@ -432,7 +505,7 @@ export function App() {
 
       {isChatOpen && (
         <Chat
-          returns={state.returns}
+          returns={effectiveReturns}
           hasApiKey={state.hasStoredKey}
           isDemo={effectiveIsDemo}
           onClose={() => setIsChatOpen(false)}
@@ -444,6 +517,10 @@ export function App() {
         isDemo={effectiveIsDemo}
         onUpload={handleOnboardingUpload}
         onClose={handleOnboardingClose}
+        isProcessing={isOnboardingProcessing}
+        fileProgress={onboardingProgress}
+        hasStoredKey={state.hasStoredKey}
+        existingYears={Object.keys(state.returns).map(Number)}
       />
 
       <UploadModal
@@ -468,13 +545,25 @@ export function App() {
         onClearData={handleClearData}
       />
 
+      {/* Get started pill - show in demo mode when onboarding was dismissed */}
+      {effectiveIsDemo && onboardingDismissed && !showOnboarding && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+          <button
+            onClick={() => setIsOnboardingOpen(true)}
+            className="get-started-pill px-4 py-2 text-sm font-medium rounded-full bg-black text-white dark:bg-zinc-800 shadow-lg hover:scale-105 transition-transform"
+          >
+            Get started
+          </button>
+        </div>
+      )}
+
       {/* Dev mode indicator */}
       {state.isDev && (
         <div className="fixed bottom-4 left-4 z-50">
           <button
             onClick={() => {
               setDevDemoOverride((prev) => {
-                const newValue = prev === null ? true : prev === true ? false : null;
+                const newValue = cycleDemoOverride(prev);
                 if (newValue === null) {
                   localStorage.removeItem(DEV_DEMO_OVERRIDE_KEY);
                 } else {
@@ -485,11 +574,7 @@ export function App() {
             }}
             className="px-2 py-1 text-xs font-mono rounded bg-[var(--color-bg-muted)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-text-muted)]"
           >
-            {devDemoOverride === null
-              ? "demo: auto"
-              : devDemoOverride
-                ? "demo: on"
-                : "demo: off"}
+            {getDemoOverrideLabel(devDemoOverride)}
             <span className="ml-1.5 opacity-50">Shift+D</span>
           </button>
         </div>

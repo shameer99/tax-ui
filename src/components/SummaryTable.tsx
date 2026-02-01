@@ -231,7 +231,7 @@ const columnHelper = createColumnHelper<SummaryRow>();
 export function SummaryTable({ returns }: Props) {
   const years = Object.keys(returns)
     .map(Number)
-    .sort((a, b) => a - b);
+    .sort((a, b) => a - b); // Oldest first
 
   const rows = useMemo(() => collectRows(returns), [returns]);
 

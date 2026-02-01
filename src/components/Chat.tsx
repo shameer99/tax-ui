@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import Markdown from "react-markdown";
 import type { TaxReturn } from "../lib/schema";
 import { BrailleSpinner } from "./BrailleSpinner";
 
@@ -15,16 +16,14 @@ interface Props {
   onClose: () => void;
 }
 
-const DEMO_RESPONSE = `This is a demo with sample data. To chat about your own tax returns, run TaxUI locally:
-
+const DEMO_RESPONSE = `This is a demo with sample data. To chat about your own tax returns, clone and run [TaxUI](https://github.com/brianlovin/tax-ui) locally:
 \`\`\`
 git clone https://github.com/brianlovin/tax-ui
 cd tax-ui
 bun install
 bun run dev
 \`\`\`
-
-You'll need Bun (bun.sh) and an Anthropic API key.`;
+You'll need [Bun](https://bun.sh) and an [Anthropic API key](https://console.anthropic.com).`;
 
 const STORAGE_KEY = "tax-chat-history";
 const WIDTH_STORAGE_KEY = "tax-chat-width";
@@ -138,9 +137,7 @@ export function Chat({ returns, hasApiKey, isDemo, onClose }: Props) {
     inputRef.current?.focus();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const prompt = input.trim();
+  async function submitMessage(prompt: string) {
     if (!prompt || isLoading) return;
 
     const userMessage: Message = {
@@ -204,10 +201,15 @@ export function Chat({ returns, hasApiKey, isDemo, onClose }: Props) {
     }
   }
 
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submitMessage(input.trim());
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      submitMessage(input.trim());
     }
   }
 
@@ -249,22 +251,7 @@ export function Chat({ returns, hasApiKey, isDemo, onClose }: Props) {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <p className="text-sm text-[var(--color-text-muted)]">Ask about your taxes</p>
-            {(isDemo || hasApiKey) && hasReturns && (
-              <div className="mt-4 space-y-2 text-left w-full">
-                {["Total income?", "Compare tax rates", "Effective rate?"].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => setInput(suggestion)}
-                    className="w-full text-left text-xs px-3 py-2 border border-[var(--color-border)] rounded-lg text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <div className="h-full" />
         ) : (
           <div className="space-y-4">
             {messages.map((message) => (
@@ -272,8 +259,28 @@ export function Chat({ returns, hasApiKey, isDemo, onClose }: Props) {
                 <div className="text-xs text-[var(--color-text-muted)] mb-1">
                   {message.role === "user" ? "You" : "Assistant"}
                 </div>
-                <div className="text-sm whitespace-pre-wrap">
-                  {message.content}
+                <div className="text-sm prose-chat">
+                  <Markdown
+                    components={{
+                      a: ({ href, children }) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text-muted)]">
+                          {children}
+                        </a>
+                      ),
+                      code: ({ children }) => (
+                        <code className="prose-code px-1 py-0.5 bg-[var(--color-bg-muted)] rounded text-xs font-mono">
+                          {children}
+                        </code>
+                      ),
+                      pre: ({ children }) => (
+                        <pre className="my-2 p-2 bg-[var(--color-bg-muted)] rounded text-xs font-mono overflow-x-auto">
+                          {children}
+                        </pre>
+                      ),
+                    }}
+                  >
+                    {message.content}
+                  </Markdown>
                 </div>
               </div>
             ))}
@@ -288,8 +295,31 @@ export function Chat({ returns, hasApiKey, isDemo, onClose }: Props) {
         )}
       </div>
 
+      {/* Suggestions - show when empty and no input */}
+      {messages.length === 0 && (isDemo || hasApiKey) && hasReturns && (
+        <div
+          className="px-4 pb-2 space-y-2 transition-opacity duration-150"
+          style={{ opacity: input ? 0 : 1, pointerEvents: input ? "none" : "auto" }}
+        >
+          <p className="text-sm font-medium text-[var(--color-text)]">Chat about your taxes</p>
+          {[
+            "Any recommendations?",
+            "How can I optimize next year?",
+            "Summarize my tax situation",
+          ].map((suggestion) => (
+            <button
+              key={suggestion}
+              onClick={() => submitMessage(suggestion)}
+              className="block text-left text-xs px-3 py-2 border border-[var(--color-border)] rounded-lg text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4">
+      <form onSubmit={handleSubmit} className="p-4 pt-2">
         <textarea
           ref={inputRef}
           value={input}
