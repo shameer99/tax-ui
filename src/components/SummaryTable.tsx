@@ -285,9 +285,11 @@ export function SummaryTable({ returns }: Props) {
 
             const isDeduction = row.label.startsWith("−") || row.label.startsWith("–") || row.label.startsWith("- ");
 
+            const isEmpty = value === undefined;
+
             return (
               <div className="text-right tabular-nums flex items-center justify-end gap-2">
-                <span className={isDeduction ? "text-(--color-text-muted)" : "text-(--color-text)"}>
+                <span className={isEmpty ? "text-(--color-text-tertiary)" : isDeduction ? "text-(--color-text-muted)" : "text-(--color-text)"}>
                   {formatValue(value, isRate)}
                 </span>
                 {prevYear !== undefined && row.showChange && (
