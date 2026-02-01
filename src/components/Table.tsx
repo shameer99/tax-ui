@@ -76,7 +76,7 @@ export function Table<TData>({ data, columns, storageKey, getRowClassName }: Tab
   });
 
   return (
-    <div ref={containerRef} className="overflow-auto w-full h-full">
+    <div ref={containerRef} className="overflow-auto w-full h-full [-webkit-overflow-scrolling:touch]">
       <table className="w-full border-collapse" style={{ minWidth: "max-content" }}>
         <thead className="sticky top-0 z-20">
           {table.getHeaderGroups().map((headerGroup) => (

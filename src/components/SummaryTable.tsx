@@ -291,11 +291,13 @@ export function SummaryTable({ returns }: Props) {
                   {formatValue(value, isRate)}
                 </span>
                 {prevYear !== undefined && row.showChange && (
-                  <ChangeCell
-                    current={value}
-                    previous={prevValue}
-                    invertPolarity={row.invertPolarity}
-                  />
+                  <span className="hidden sm:inline">
+                    <ChangeCell
+                      current={value}
+                      previous={prevValue}
+                      invertPolarity={row.invertPolarity}
+                    />
+                  </span>
                 )}
               </div>
             );

@@ -71,7 +71,7 @@ export function SummaryStats({ returns }: Props) {
               values={stats.income.sparkline}
               width={48}
               height={20}
-              className="text-[var(--color-text-muted)]"
+              className="text-[var(--color-chart)]"
             />
           </div>
         </div>
@@ -86,7 +86,7 @@ export function SummaryStats({ returns }: Props) {
               values={stats.taxes.sparkline}
               width={48}
               height={20}
-              className="text-[var(--color-negative)]"
+              className="text-[var(--color-chart)]"
             />
           </div>
         </div>
@@ -101,7 +101,7 @@ export function SummaryStats({ returns }: Props) {
               values={stats.net.sparkline}
               width={48}
               height={20}
-              className="text-[var(--color-positive)]"
+              className="text-[var(--color-chart)]"
             />
           </div>
         </div>

@@ -76,7 +76,7 @@ export function MainPanel(props: Props) {
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--color-bg)]">
       {/* Header */}
-      <header className="h-12 pl-6 pr-3 flex items-center justify-between flex-shrink-0 border-b border-[var(--color-border)]">
+      <header className="h-12 px-3 sm:pl-6 sm:pr-3 flex items-center justify-between flex-shrink-0 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-6 min-w-0 flex-1">
           {/* Hamburger Menu */}
           <Menu.Root>

@@ -266,9 +266,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose, isProcessi
       <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <Dialog.Portal>
           <Dialog.Backdrop className="dialog-backdrop fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-[2px] z-40" />
-          <Dialog.Popup className="dialog-popup fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-[var(--color-bg)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-h-[90vh] flex flex-col focus:outline-none">
+          <Dialog.Popup className="dialog-popup fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 w-full sm:max-w-lg bg-[var(--color-bg)] sm:border border-[var(--color-border)] sm:rounded-2xl shadow-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col focus:outline-none">
             {/* Scrollable content area */}
-            <div ref={handleScrollRef} className="flex-1 overflow-y-auto min-h-0 px-8 pt-8 pb-6 relative">
+            <div ref={handleScrollRef} className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 pt-6 sm:pt-8 pb-4 sm:pb-6 relative">
               {/* Header with close button */}
               <div className="flex items-start justify-between mb-6">
                 <div>
@@ -420,9 +420,9 @@ export function OnboardingDialog({ isOpen, isDemo, onUpload, onClose, isProcessi
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && !isProcessing && onClose()}>
       <Dialog.Portal>
         <Dialog.Backdrop className="dialog-backdrop fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-[2px] z-40" />
-        <Dialog.Popup className="dialog-popup fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-[var(--color-bg)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-h-[90vh] flex flex-col focus:outline-none">
+        <Dialog.Popup className="dialog-popup fixed inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 w-full sm:max-w-lg bg-[var(--color-bg)] sm:border border-[var(--color-border)] sm:rounded-2xl shadow-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col focus:outline-none">
           {/* Scrollable content area */}
-          <div ref={handleScrollRef} className="flex-1 overflow-y-auto min-h-0 px-8 pt-8 pb-6">
+          <div ref={handleScrollRef} className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 pt-6 sm:pt-8 pb-4 sm:pb-6">
             {/* Header with close button */}
             <div className="flex items-start justify-between mb-6">
               <div>

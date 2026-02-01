@@ -16,6 +16,8 @@ interface Props {
   onSubmit: (prompt: string) => void;
   onNewChat: () => void;
   onClose: () => void;
+  followUpSuggestions?: string[];
+  isLoadingSuggestions?: boolean;
 }
 
 const WIDTH_STORAGE_KEY = "tax-chat-width";
@@ -42,12 +44,20 @@ function saveWidth(width: number) {
   }
 }
 
-export function Chat({ messages, isLoading, hasApiKey, isDemo, onSubmit, onNewChat, onClose }: Props) {
+export function Chat({ messages, isLoading, hasApiKey, isDemo, onSubmit, onNewChat, onClose, followUpSuggestions, isLoadingSuggestions }: Props) {
   const [input, setInput] = useState("");
   const [width, setWidth] = useState(() => loadWidth());
   const [isResizing, setIsResizing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!isResizing) {
@@ -124,13 +134,15 @@ export function Chat({ messages, isLoading, hasApiKey, isDemo, onSubmit, onNewCh
 
   return (
     <div
-      className="flex flex-col h-full bg-[var(--color-bg)] border-l border-[var(--color-border)] relative"
-      style={{ width }}
+      className={`flex flex-col h-full bg-[var(--color-bg)] border-l border-[var(--color-border)] relative ${
+        isMobile ? "fixed inset-0 z-40" : ""
+      }`}
+      style={isMobile ? undefined : { width }}
     >
       {/* Resize handle */}
       <div
         onMouseDown={handleMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[var(--color-border)] z-10"
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[var(--color-border)] z-10 hidden md:block"
       />
       {/* Header */}
       <header className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
@@ -184,6 +196,20 @@ export function Chat({ messages, isLoading, hasApiKey, isDemo, onSubmit, onNewCh
                           {children}
                         </pre>
                       ),
+                      table: ({ children }) => (
+                        <div className="my-2 overflow-x-auto">
+                          <table className="text-xs border-collapse">{children}</table>
+                        </div>
+                      ),
+                      thead: ({ children }) => (
+                        <thead className="border-b border-[var(--color-border)]">{children}</thead>
+                      ),
+                      th: ({ children }) => (
+                        <th className="text-left py-1 pr-4 font-medium text-[var(--color-text-muted)]">{children}</th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="py-1 pr-4 tabular-nums">{children}</td>
+                      ),
                     }}
                   >
                     {message.content}
@@ -201,6 +227,28 @@ export function Chat({ messages, isLoading, hasApiKey, isDemo, onSubmit, onNewCh
           </div>
         )}
       </div>
+
+      {/* Dynamic follow-up suggestions */}
+      {messages.length > 0 && !isLoading && (isLoadingSuggestions || (followUpSuggestions && followUpSuggestions.length > 0)) && (
+        <div
+          className="px-4 py-2 flex flex-wrap gap-2 transition-opacity duration-150 border-t border-[var(--color-border)]"
+          style={{ opacity: input ? 0 : 1, pointerEvents: input ? "none" : "auto" }}
+        >
+          {isLoadingSuggestions ? (
+            <BrailleSpinner className="text-xs text-[var(--color-text-muted)]" />
+          ) : (
+            followUpSuggestions?.map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => onSubmit(suggestion)}
+                className="text-left text-xs px-3 py-2 border border-[var(--color-border)] rounded-lg text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              >
+                {suggestion}
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Suggestions - show when empty and no input */}
       {messages.length === 0 && (isDemo || hasApiKey) && (

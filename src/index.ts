@@ -137,6 +137,49 @@ const server = serve({
         }
       },
     },
+    "/api/suggestions": {
+      POST: async (req) => {
+        const { history, returns: clientReturns } = await req.json();
+
+        const apiKey = getApiKey();
+        if (!apiKey) {
+          return Response.json({ suggestions: [] });
+        }
+
+        const returns = clientReturns && Object.keys(clientReturns).length > 0
+          ? clientReturns
+          : await getReturns();
+
+        const client = new Anthropic({ apiKey });
+
+        try {
+          const response = await client.messages.create({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 256,
+            system: `Generate 3 short follow-up questions based on this tax conversation. Return ONLY a JSON array of strings, nothing else. Example: ["Question 1?", "Question 2?", "Question 3?"]`,
+            messages: history.map((msg: { role: string; content: string }) => ({
+              role: msg.role as "user" | "assistant",
+              content: msg.content,
+            })),
+          });
+
+          const textBlock = response.content.find((block) => block.type === "text");
+          let text = textBlock?.type === "text" ? textBlock.text : "[]";
+
+          // Extract JSON array from response (handle markdown, extra text, etc.)
+          const arrayMatch = text.match(/\[[\s\S]*\]/);
+          if (!arrayMatch) return Response.json({ suggestions: [] });
+
+          const suggestions = JSON.parse(arrayMatch[0]);
+          if (!Array.isArray(suggestions)) return Response.json({ suggestions: [] });
+
+          return Response.json({ suggestions: suggestions.slice(0, 3) });
+        } catch (error) {
+          console.error("Suggestions error:", error);
+          return Response.json({ suggestions: [] });
+        }
+      },
+    },
     "/api/parse": {
       POST: async (req) => {
         const formData = await req.formData();

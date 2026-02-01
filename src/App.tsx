@@ -127,6 +127,9 @@ export function App() {
   const [devTriggerError, setDevTriggerError] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => loadChatMessages());
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
   // Compute effective demo mode early (dev override takes precedence)
   const effectiveIsDemo = devDemoOverride !== null ? devDemoOverride : state.isDemo;
@@ -167,6 +170,14 @@ export function App() {
   useEffect(() => {
     saveChatMessages(chatMessages);
   }, [chatMessages]);
+
+  // Auto-submit pending message when chat is ready
+  useEffect(() => {
+    if (pendingAutoMessage && isChatOpen && !isChatLoading) {
+      submitChatMessage(pendingAutoMessage);
+      setPendingAutoMessage(null);
+    }
+  }, [pendingAutoMessage, isChatOpen, isChatLoading]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -307,9 +318,11 @@ export function App() {
 
     // Process files sequentially (full parsing)
     setIsUploading(true);
+    let successfulUploads = 0;
     for (const pending of newPendingUploads) {
       try {
         await processUpload(pending.file, "");
+        successfulUploads++;
         // Remove from pending uploads after success
         setPendingUploads((prev) => prev.filter((p) => p.id !== pending.id));
       } catch (err) {
@@ -325,6 +338,15 @@ export function App() {
       ...s,
       selectedYear: getDefaultSelection(s.returns),
     }));
+
+    // Auto-trigger chat after successful upload
+    if (successfulUploads > 0) {
+      const autoMessage = files.length === 1
+        ? "Help me understand my year"
+        : "Help me understand my history of income and taxes";
+      setPendingAutoMessage(autoMessage);
+      setIsChatOpen(true);
+    }
   }
 
   async function handleUploadFromModal(files: File[], apiKey: string) {
@@ -375,6 +397,9 @@ export function App() {
   async function submitChatMessage(prompt: string) {
     if (!prompt || isChatLoading) return;
 
+    // Clear follow-up suggestions when sending a new message
+    setFollowUpSuggestions([]);
+
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
@@ -422,6 +447,21 @@ export function App() {
       };
 
       setChatMessages((prev) => [...prev, assistantMessage]);
+
+      // Fetch follow-up suggestions (non-blocking)
+      setIsLoadingSuggestions(true);
+      fetch("/api/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          history: [...chatMessages, userMessage, assistantMessage],
+          returns: effectiveReturns,
+        }),
+      })
+        .then((res) => res.json())
+        .then(({ suggestions }) => setFollowUpSuggestions(suggestions || []))
+        .catch(() => setFollowUpSuggestions([]))
+        .finally(() => setIsLoadingSuggestions(false));
     } catch (err) {
       console.error("Chat error:", err);
       const errorMessage: ChatMessage = {
@@ -438,6 +478,7 @@ export function App() {
   function handleNewChat() {
     setChatMessages([]);
     saveChatMessages([]);
+    setFollowUpSuggestions([]);
   }
 
   function handleSelect(id: string) {
@@ -594,6 +635,15 @@ export function App() {
     setIsOnboardingProcessing(false);
     setIsOnboardingOpen(false);
     setOnboardingProgress([]);
+
+    // Auto-trigger chat after successful upload
+    if (uploadedYears.length > 0) {
+      const autoMessage = files.length === 1
+        ? "Help me understand my year"
+        : "Help me understand my history of income and taxes";
+      setPendingAutoMessage(autoMessage);
+      setIsChatOpen(true);
+    }
   }
 
   function handleOnboardingClose() {
@@ -622,6 +672,8 @@ export function App() {
             onSubmit={submitChatMessage}
             onNewChat={handleNewChat}
             onClose={() => setIsChatOpen(false)}
+            followUpSuggestions={followUpSuggestions}
+            isLoadingSuggestions={isLoadingSuggestions}
           />
         </ErrorBoundary>
       )}
