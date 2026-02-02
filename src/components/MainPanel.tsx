@@ -5,7 +5,7 @@ import { cn } from "../lib/cn";
 import type { TaxReturn, PendingUpload } from "../lib/schema";
 import type { NavItem } from "../lib/types";
 import { ReceiptView } from "./ReceiptView";
-import { SummaryStats } from "./SummaryStats";
+import { StatsHeader } from "./StatsHeader";
 import { SummaryTable } from "./SummaryTable";
 import { SummaryReceiptView } from "./SummaryReceiptView";
 import { LoadingView } from "./LoadingView";
@@ -30,6 +30,8 @@ interface CommonProps {
   isDemo: boolean;
   hasUserData: boolean;
   hasStoredKey: boolean;
+  returns: Record<number, TaxReturn>;
+  selectedYear: "summary" | number;
 }
 
 interface ReceiptProps extends CommonProps {
@@ -40,7 +42,6 @@ interface ReceiptProps extends CommonProps {
 
 interface SummaryProps extends CommonProps {
   view: "summary";
-  returns: Record<number, TaxReturn>;
 }
 
 interface LoadingProps extends CommonProps {
@@ -153,7 +154,7 @@ export function MainPanel(props: Props) {
               ref={navRef}
               className="flex items-center gap-0.5 flex-1 min-w-0"
             >
-              <Tabs.List className="flex items-center gap-0.5">
+              <Tabs.List className="flex items-center gap-0.5" activateOnFocus>
                 {visibleItems.map((item) => {
                   const isYear = item.id !== "summary";
                   const canDelete =
@@ -166,7 +167,7 @@ export function MainPanel(props: Props) {
                       className={cn(
                         "px-2.5 py-1 text-sm font-medium rounded-lg shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-(--color-text-muted)",
                         props.selectedId === item.id
-                          ? "text-(--color-text) bg-(--color-bg-muted)"
+                          ? "text-(--color-text) dark:shadow-contrast bg-(--color-bg-muted)"
                           : "text-(--color-text-muted) hover:text-(--color-text) hover:bg-(--color-bg-muted)",
                       )}
                     >
@@ -187,7 +188,10 @@ export function MainPanel(props: Props) {
                               className={cn(popupBaseClassName, "z-50")}
                             >
                               <ContextMenu.Item
-                                className={cn(itemBaseClassName, "data-[highlighted]:bg-(--color-bg-muted)")}
+                                className={cn(
+                                  itemBaseClassName,
+                                  "data-[highlighted]:bg-(--color-bg-muted)",
+                                )}
                                 onClick={() => props.onDeleteYear?.(item.id)}
                               >
                                 <TrashIcon />
@@ -261,21 +265,27 @@ export function MainPanel(props: Props) {
           status={props.pendingUpload.status}
         />
       ) : props.view === "summary" ? (
-        summaryViewMode === "table" ? (
-          <div className="flex-1 flex flex-col min-h-0">
-            <SummaryStats returns={props.returns} isDemo={props.isDemo} onOpenStart={props.onOpenStart} />
-            <div className="flex-1 min-h-0">
+        <div className="flex-1 flex flex-col min-h-0">
+          <StatsHeader returns={props.returns} selectedYear="summary" />
+          {summaryViewMode === "table" ? (
+            <div className="flex-1 min-h-0 overflow-hidden">
               <SummaryTable returns={props.returns} />
             </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            <SummaryReceiptView returns={props.returns} />
-          </div>
-        )
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <SummaryReceiptView returns={props.returns} />
+            </div>
+          )}
+        </div>
       ) : props.view === "receipt" ? (
-        <div className="flex-1 overflow-y-auto">
-          <ReceiptView data={props.data} />
+        <div className="flex-1 flex flex-col min-h-0">
+          <StatsHeader
+            returns={props.returns}
+            selectedYear={props.selectedYear as number}
+          />
+          <div className="flex-1 bg-neutral-50 dark:bg-neutral-950 overflow-y-auto">
+            <ReceiptView data={props.data} />
+          </div>
         </div>
       ) : null}
     </div>

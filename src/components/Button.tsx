@@ -33,7 +33,7 @@ const variantStyles: Record<Variant, string> = {
   danger: "bg-red-500 text-white hover:bg-red-600",
   "danger-outline":
     "border border-red-400/50 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500",
-  pill: "rounded-full! bg-black text-white dark:bg-zinc-800 shadow-lg hover:scale-105 transition-transform",
+  pill: "rounded-full! dark:shadow-contrast bg-black text-white dark:bg-zinc-800 shadow-lg hover:scale-105 transition-transform",
 };
 
 const sizeStyles: Record<Size, string> = {
