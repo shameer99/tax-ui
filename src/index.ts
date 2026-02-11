@@ -16,7 +16,7 @@ import {
 } from "./lib/storage";
 
 // Model used for lightweight operations (validation, suggestions)
-const FAST_MODEL = "gemini-2.5-flash";
+const FAST_MODEL = "gemini-3-flash-preview";
 
 function isAuthError(message: string): boolean {
   return (
@@ -177,7 +177,7 @@ const routes: Record<string, any> = {
         contents.push({ role: "user", parts: [{ text: prompt }] });
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3-flash-preview",
           contents,
           config: {
             systemInstruction: buildChatSystemPrompt(returns),

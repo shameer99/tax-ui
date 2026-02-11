@@ -66,7 +66,7 @@ async function splitPdf(pdfBase64: string): Promise<string[]> {
 
 async function parseChunk(pdfBase64: string, ai: GoogleGenAI): Promise<TaxReturn> {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     contents: [
       {
         inlineData: {
@@ -258,7 +258,7 @@ export async function extractYearFromPdf(
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: [
         {
           inlineData: {

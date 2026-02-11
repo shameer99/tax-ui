@@ -57,7 +57,7 @@ export function SettingsModal({ isOpen, onClose, hasApiKey, onSaveApiKey, onClea
       <div className="space-y-6">
         {/* API Key Section */}
         <div>
-          <label className="mb-2 block text-sm font-medium">Anthropic API Key</label>
+          <label className="mb-2 block text-sm font-medium">Gemini API Key</label>
           {hasApiKey ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-(--color-text-muted)">

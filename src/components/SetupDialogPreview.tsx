@@ -306,7 +306,7 @@ export function SetupDialogPreview({ onClose }: Props) {
             <div>
               {/* API Key Section */}
               <div className="mb-6">
-                <label className="mb-2 block text-sm font-medium">Anthropic API Key</label>
+                <label className="mb-2 block text-sm font-medium">Gemini API Key</label>
                 {scenario.hasStoredKey ? (
                   <div className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2.5 text-sm text-(--color-text-muted)">
                     sk-ant-•••••••••••••••

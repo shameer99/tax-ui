@@ -161,7 +161,7 @@ export function UploadModal({
       {(!hasStoredKey || configureKeyOnly) && (
         <div className="mb-4">
           <label className="mb-1.5 block text-xs text-(--color-text-muted)">
-            Anthropic API Key
+            Gemini API Key
           </label>
           <Input
             type="password"
@@ -228,7 +228,7 @@ export function UploadModal({
       {/* Privacy note */}
       {!configureKeyOnly && (
         <div className="mt-4 text-xs text-(--color-text-muted)">
-          Your tax return is sent directly to Anthropic's API. Data stored locally.
+          Your tax return is sent directly to Google's Gemini API. Data stored locally.
         </div>
       )}
 

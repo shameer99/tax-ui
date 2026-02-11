@@ -11,13 +11,13 @@ Repository: https://github.com/brianlovin/tax-ui
 Please analyze the source code and verify:
 
 1. DATA HANDLING
-   - Tax return PDFs are sent directly to Anthropic's API for parsing
+   - Tax return PDFs are sent directly to Google's Gemini API for parsing
    - No data is sent to any other third-party servers
    - Parsed data is stored locally only
 
 2. NETWORK ACTIVITY
    - Identify all network requests in the codebase
-   - Verify the only external calls are to Anthropic's API
+   - Verify the only external calls are to Google's Gemini API
    - Check for any hidden data collection or tracking
 
 3. API KEY SECURITY
@@ -93,11 +93,11 @@ export function FAQSection() {
             >
               <div className="space-y-2 px-3 pt-1 pb-3 text-sm text-(--color-text-muted)">
                 <p>
-                  Your tax data is processed locally and sent directly to Anthropic's API using your
+                  Your tax data is processed locally and sent directly to Google's Gemini API using your
                   own API key. No data is stored on any third-party servers.
                 </p>
                 <p>
-                  Anthropic's commercial terms prohibit training models on API customer data.{" "}
+                  Google's API terms govern data processing.{" "}
                   <a
                     href="https://policies.google.com/privacy"
                     target="_blank"

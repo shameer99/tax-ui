@@ -262,7 +262,7 @@ export function SetupDialog({
       <div>
         {/* API Key Section - always visible */}
         <div className="mb-6">
-          <label className="mb-2 block text-sm font-medium">Anthropic API Key</label>
+          <label className="mb-2 block text-sm font-medium">Gemini API Key</label>
           {hasStoredKey ? (
             <div className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2.5 text-sm text-(--color-text-muted)">
               sk-ant-•••••••••••••••

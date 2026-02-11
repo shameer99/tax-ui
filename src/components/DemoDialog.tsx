@@ -210,7 +210,7 @@ export function DemoDialog({ isOpen, onClose, skipOpenAnimation }: Props) {
                   rel="noopener noreferrer"
                   className="underline hover:text-(--color-text)"
                 >
-                  Anthropic API key
+                  Gemini API key
                 </a>
               </p>
             </div>
