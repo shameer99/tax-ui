@@ -93,8 +93,8 @@ export function FAQSection() {
             >
               <div className="space-y-2 px-3 pt-1 pb-3 text-sm text-(--color-text-muted)">
                 <p>
-                  Your tax data is processed locally and sent directly to Google's Gemini API using your
-                  own API key. No data is stored on any third-party servers.
+                  Your tax data is processed locally and sent directly to Google's Gemini API using
+                  your own API key. No data is stored on any third-party servers.
                 </p>
                 <p>
                   Google's API terms govern data processing.{" "}

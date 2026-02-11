@@ -4,16 +4,44 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import index from "./index.html";
-import { extractYearFromPdf, parseTaxReturn } from "./lib/parser";
 import {
-  clearAllData,
-  deleteReturn,
-  getApiKey,
-  getReturns,
-  removeApiKey,
-  saveApiKey,
-  saveReturn,
-} from "./lib/storage";
+  classifyParseError,
+  extractYearFromPdf,
+  type ParseProgressEvent,
+  parseTaxReturnWithProgress,
+} from "./lib/parser";
+import { clearAllData, deleteReturn, getApiKey, getReturns, saveReturn } from "./lib/storage";
+
+// ── Progress store for polling ──────────────────────────────────────────────
+interface ParseJob {
+  percent: number;
+  phase: string;
+  message?: string;
+  done: boolean;
+  error?: string;
+}
+const parseJobs = new Map<string, ParseJob>();
+
+function updateJob(id: string, event: ParseProgressEvent) {
+  parseJobs.set(id, {
+    percent: event.percent,
+    phase: event.phase,
+    message: event.message,
+    done: false,
+  });
+}
+
+function completeJob(id: string) {
+  const job = parseJobs.get(id);
+  if (job) job.done = true;
+  // Clean up after 60s
+  setTimeout(() => parseJobs.delete(id), 60_000);
+}
+
+function failJob(id: string, error: string) {
+  parseJobs.set(id, { percent: 0, phase: "error", message: error, done: true, error });
+  setTimeout(() => parseJobs.delete(id), 60_000);
+}
 
 // Model used for lightweight operations (validation, suggestions)
 const FAST_MODEL = "gemini-3-flash-preview";
@@ -22,6 +50,70 @@ function isAuthError(message: string): boolean {
   return (
     message.includes("authentication") || message.includes("401") || message.includes("API key")
   );
+}
+
+function getParseErrorResponse(error: unknown): {
+  status: number;
+  error: string;
+  category: string;
+} {
+  const classified = classifyParseError(error);
+  const message = classified.message || "Unknown error";
+
+  if (classified.category === "auth" || isAuthError(message)) {
+    return { status: 401, error: "Invalid API key", category: "auth" };
+  }
+  if (
+    classified.category === "invalid_request" ||
+    message.includes("prompt is too long") ||
+    message.includes("too many tokens")
+  ) {
+    return {
+      status: 400,
+      error: "PDF is too large to process. Try uploading just the main tax forms.",
+      category: "invalid_request",
+    };
+  }
+  if (classified.category === "invalid_response" || message.includes("JSON")) {
+    return {
+      status: 422,
+      error: "Failed to parse tax return data",
+      category: "invalid_response",
+    };
+  }
+
+  return {
+    status: 500,
+    error: message,
+    category: classified.category,
+  };
+}
+
+/** Serialize Server-Timing metric: name;dur=ms or name;dur=ms;desc="..." */
+function serverTiming(name: string, durMs: number, desc?: string): string {
+  let s = `${name};dur=${durMs.toFixed(2)}`;
+  if (desc) s += `;desc="${desc.replace(/"/g, "'")}"`;
+  return s;
+}
+
+/** Wrap a route handler to add Server-Timing header to the response */
+function withServerTiming<T extends Request>(
+  name: string,
+  handler: (req: T) => Promise<Response>,
+): (req: T) => Promise<Response> {
+  return async (req: T) => {
+    const start = performance.now();
+    const res = await handler(req);
+    const dur = performance.now() - start;
+    const timing = serverTiming(name, dur);
+    const headers = new Headers(res.headers);
+    headers.set("Server-Timing", timing);
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  };
 }
 
 // Parse --port from command line args (supports --port=XXXX or --port XXXX)
@@ -62,62 +154,40 @@ Answer questions about the user's income, taxes, deductions, credits, and tax ra
 
 const routes: Record<string, any> = {
   "/api/config": {
-    GET: () => {
+    GET: withServerTiming("config", async () => {
       const hasKey = Boolean(getApiKey());
       const isDemo = process.env.DEMO_MODE === "true";
       const isDev = process.env.NODE_ENV !== "production";
       return Response.json({ hasKey, isDemo, isDev });
-    },
-  },
-  "/api/config/key": {
-    POST: async (req: Request) => {
-      const { apiKey } = await req.json();
-      if (!apiKey || typeof apiKey !== "string") {
-        return Response.json({ error: "Invalid API key" }, { status: 400 });
-      }
-
-      // Validate the key with a minimal API call
-      try {
-        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-        await ai.models.generateContent({
-          model: FAST_MODEL,
-          contents: "hi",
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "";
-        if (isAuthError(message)) {
-          return Response.json({ error: "Invalid API key" }, { status: 401 });
-        }
-        // Other errors (rate limit, etc.) - key is probably valid
-      }
-
-      await saveApiKey(apiKey.trim());
-      return Response.json({ success: true });
-    },
+    }),
   },
   "/api/clear-data": {
-    POST: async () => {
+    POST: withServerTiming("clear-data", async () => {
       await clearAllData();
       return Response.json({ success: true });
-    },
+    }),
   },
   "/api/returns": {
-    GET: async () => {
+    GET: withServerTiming("returns", async () => {
       return Response.json(await getReturns());
-    },
+    }),
   },
   "/api/returns/:year": {
-    DELETE: async (req: Request & { params: { year: string } }) => {
-      const year = Number(req.params.year);
-      if (isNaN(year)) {
-        return Response.json({ error: "Invalid year" }, { status: 400 });
-      }
-      await deleteReturn(year);
-      return Response.json({ success: true });
-    },
+    DELETE: withServerTiming(
+      "delete-return",
+      async (req: Request & { params: { year: string } }) => {
+        const year = Number(req.params.year);
+        if (isNaN(year)) {
+          return Response.json({ error: "Invalid year" }, { status: 400 });
+        }
+        await deleteReturn(year);
+        return Response.json({ success: true });
+      },
+    ),
   },
   "/api/extract-year": {
-    POST: async (req: Request) => {
+    POST: withServerTiming("extract-year", async (req: Request) => {
+      console.log("[extract-year] request received");
       const formData = await req.formData();
       const file = formData.get("pdf") as File | null;
 
@@ -125,30 +195,30 @@ const routes: Record<string, any> = {
         return Response.json({ error: "No PDF file provided" }, { status: 400 });
       }
 
-      const formApiKey = formData.get("apiKey") as string | null;
-      const apiKey = formApiKey || getApiKey();
+      const apiKey = getApiKey();
       if (!apiKey) {
-        return Response.json({ error: "No API key configured" }, { status: 400 });
+        return Response.json({ error: "Set GEMINI_API_KEY in .env" }, { status: 400 });
       }
 
       try {
+        console.log("[extract-year] calling Gemini...");
         const buffer = await file.arrayBuffer();
         const base64 = Buffer.from(buffer).toString("base64");
         const year = await extractYearFromPdf(base64, apiKey);
+        console.log("[extract-year] done, year:", year);
         return Response.json({ year });
       } catch (error) {
         console.error("Year extraction error:", error);
         const message = error instanceof Error ? error.message : "";
         if (isAuthError(message)) {
-          await removeApiKey();
           return Response.json({ error: "Invalid API key" }, { status: 401 });
         }
-        return Response.json({ year: null });
+        return Response.json({ year: null, error: message || "PDF failed to load" });
       }
-    },
+    }),
   },
   "/api/chat": {
-    POST: async (req: Request) => {
+    POST: withServerTiming("chat", async (req: Request) => {
       const { prompt, history, returns: clientReturns } = await req.json();
 
       if (!prompt || typeof prompt !== "string") {
@@ -157,10 +227,10 @@ const routes: Record<string, any> = {
 
       const apiKey = getApiKey();
       if (!apiKey) {
-        return Response.json({ error: "No API key configured" }, { status: 400 });
+        return Response.json({ error: "Set GEMINI_API_KEY in .env" }, { status: 400 });
       }
 
-      // Use client-provided returns (for dev sample data) or fall back to stored returns
+      // Use client-provided returns or fall back to stored returns
       const returns =
         clientReturns && Object.keys(clientReturns).length > 0 ? clientReturns : await getReturns();
       const ai = new GoogleGenAI({ apiKey });
@@ -192,15 +262,14 @@ const routes: Record<string, any> = {
         console.error("Chat error:", error);
         const message = error instanceof Error ? error.message : "Unknown error";
         if (isAuthError(message)) {
-          await removeApiKey();
           return Response.json({ error: "Invalid API key" }, { status: 401 });
         }
         return Response.json({ error: message }, { status: 500 });
       }
-    },
+    }),
   },
   "/api/suggestions": {
-    POST: async (req: Request) => {
+    POST: withServerTiming("suggestions", async (req: Request) => {
       const { history, returns: clientReturns } = await req.json();
 
       const apiKey = getApiKey();
@@ -247,54 +316,62 @@ const routes: Record<string, any> = {
         console.error("Suggestions error:", error);
         return Response.json({ suggestions: [] });
       }
-    },
+    }),
   },
   "/api/parse": {
-    POST: async (req: Request) => {
-      const formData = await req.formData();
+    POST: withServerTiming("parse", async (req: Request) => {
+      let formData: FormData;
+      try {
+        formData = await req.formData();
+      } catch {
+        return Response.json({ error: "Invalid multipart form data" }, { status: 400 });
+      }
       const file = formData.get("pdf") as File | null;
-      const apiKeyFromForm = formData.get("apiKey") as string | null;
+      const progressId = formData.get("progressId") as string | null;
 
       if (!file) {
         return Response.json({ error: "No PDF file provided" }, { status: 400 });
       }
 
-      const apiKey = apiKeyFromForm?.trim() || getApiKey();
+      const apiKey = getApiKey();
       if (!apiKey) {
-        return Response.json({ error: "No API key provided" }, { status: 400 });
+        return Response.json({ error: "Set GEMINI_API_KEY in .env" }, { status: 400 });
       }
 
       try {
         const buffer = await file.arrayBuffer();
         const base64 = Buffer.from(buffer).toString("base64");
-        const taxReturn = await parseTaxReturn(base64, apiKey);
+        console.log(
+          "[parse] Starting",
+          file.name,
+          "size:",
+          (buffer.byteLength / 1024).toFixed(0),
+          "KB",
+        );
 
-        // Save key only after successful parse
-        if (apiKeyFromForm?.trim()) {
-          await saveApiKey(apiKeyFromForm.trim());
-        }
+        const { taxReturn, timings } = await parseTaxReturnWithProgress(base64, apiKey, {
+          onProgress: progressId ? (event) => updateJob(progressId, event) : undefined,
+        });
+        console.log("[parse] Done", file.name, timings);
 
         await saveReturn(taxReturn);
+        if (progressId) completeJob(progressId);
         return Response.json(taxReturn);
       } catch (error) {
         console.error("Parse error:", error);
-        const message = error instanceof Error ? error.message : "Unknown error";
-
-        if (isAuthError(message)) {
-          await removeApiKey();
-          return Response.json({ error: "Invalid API key" }, { status: 401 });
-        }
-        if (message.includes("prompt is too long") || message.includes("too many tokens")) {
-          return Response.json(
-            { error: "PDF is too large to process. Try uploading just the main tax forms." },
-            { status: 400 },
-          );
-        }
-        if (message.includes("JSON")) {
-          return Response.json({ error: "Failed to parse tax return data" }, { status: 422 });
-        }
-        return Response.json({ error: message }, { status: 500 });
+        const parseError = getParseErrorResponse(error);
+        if (progressId) failJob(progressId, parseError.error);
+        return Response.json({ error: parseError.error }, { status: parseError.status });
       }
+    }),
+  },
+  "/api/parse-progress/:id": {
+    GET: async (req: Request & { params: { id: string } }) => {
+      const job = parseJobs.get(req.params.id);
+      if (!job) {
+        return Response.json({ percent: 0, phase: "pending", done: false });
+      }
+      return Response.json(job);
     },
   },
 };

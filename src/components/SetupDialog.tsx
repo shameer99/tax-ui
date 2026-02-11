@@ -1,4 +1,3 @@
-import { Input } from "@base-ui/react/input";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,11 +9,11 @@ import { type DisplayFile, FileUploadPreview } from "./FileUploadPreview";
 
 interface Props {
   isOpen: boolean;
-  onUpload: (files: FileWithId[], apiKey: string) => Promise<void>;
+  onUpload: (files: FileWithId[]) => Promise<void>;
   onClose: () => void;
   isProcessing?: boolean;
   fileProgress?: FileProgress[];
-  hasStoredKey?: boolean;
+  hasApiKey: boolean;
   existingYears?: number[];
   skipOpenAnimation?: boolean;
 }
@@ -33,11 +32,10 @@ export function SetupDialog({
   onClose,
   isProcessing,
   fileProgress,
-  hasStoredKey,
+  hasApiKey,
   existingYears = [],
   skipOpenAnimation,
 }: Props) {
-  const [apiKey, setApiKey] = useState("");
   const [files, setFiles] = useState<FileWithYear[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,16 +49,18 @@ export function SetupDialog({
     }
   }, [isOpen, isProcessing]);
 
-  async function extractYearFromFile(file: File, key: string): Promise<number | null> {
+  async function extractYearFromFile(file: File): Promise<number | null> {
     try {
       const formData = new FormData();
       formData.append("pdf", file);
-      if (key) formData.append("apiKey", key);
       const res = await fetch("/api/extract-year", {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+      }
       return data.year ?? null;
     } catch {
       return null;
@@ -81,8 +81,7 @@ export function SetupDialog({
   }
 
   async function addFiles(newFiles: File[]) {
-    const key = hasStoredKey ? "" : apiKey.trim();
-    const canExtract = !!key || !!hasStoredKey;
+    const canExtract = hasApiKey;
 
     const newFileEntries: FileWithYear[] = newFiles.map((file) => ({
       id: crypto.randomUUID(),
@@ -98,7 +97,7 @@ export function SetupDialog({
 
     await Promise.all(
       newFileEntries.map(async (entry) => {
-        const year = await extractYearFromFile(entry.file, key);
+        const year = await extractYearFromFile(entry.file);
         setFiles((prev) => {
           const updated = [...prev];
           const idx = updated.findIndex((f) => f.id === entry.id);
@@ -177,8 +176,8 @@ export function SetupDialog({
   }
 
   async function handleSubmit() {
-    if (!hasStoredKey && !apiKey.trim()) {
-      setError("Please enter your API key");
+    if (!hasApiKey) {
+      setError("Add GEMINI_API_KEY to your .env file");
       return;
     }
     if (files.length === 0) {
@@ -190,10 +189,7 @@ export function SetupDialog({
     setError(null);
 
     try {
-      await onUpload(
-        files.map((f) => ({ id: f.id, file: f.file })),
-        apiKey.trim(),
-      );
+      await onUpload(files.map((f) => ({ id: f.id, file: f.file })));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process PDFs");
     } finally {
@@ -209,6 +205,8 @@ export function SetupDialog({
           filename: fp.filename,
           year: fp.year ?? null,
           status: fp.status as DisplayFile["status"],
+          percent: fp.percent,
+          phase: fp.phase,
           isDuplicate: false,
           error: fp.error,
         }))
@@ -238,11 +236,7 @@ export function SetupDialog({
   }
 
   const isSubmitDisabled =
-    isLoading ||
-    isProcessing ||
-    isExtracting ||
-    (!hasStoredKey && !apiKey.trim()) ||
-    files.length === 0;
+    isLoading || isProcessing || isExtracting || !hasApiKey || files.length === 0;
 
   const isInteractionDisabled = isLoading || isProcessing;
 
@@ -250,8 +244,8 @@ export function SetupDialog({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      title={hasStoredKey ? "Upload tax returns" : "Tax UI"}
-      description={hasStoredKey ? "Upload more tax returns" : "Make sense of your tax returns"}
+      title={hasApiKey ? "Upload tax returns" : "Tax UI"}
+      description={hasApiKey ? "Upload more tax returns" : "Make sense of your tax returns"}
       size="lg"
       fullScreenMobile
       showClose={!isProcessing}
@@ -260,41 +254,25 @@ export function SetupDialog({
       footer={<FAQSection />}
     >
       <div>
-        {/* API Key Section - always visible */}
-        <div className="mb-6">
-          <label className="mb-2 block text-sm font-medium">Gemini API Key</label>
-          {hasStoredKey ? (
-            <div className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2.5 text-sm text-(--color-text-muted)">
-              sk-ant-•••••••••••••••
-            </div>
-          ) : (
-            <>
-              <Input
-                autoFocus
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-ant-..."
-                disabled={isInteractionDisabled}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2.5 text-sm placeholder:text-(--color-text-muted) focus:border-(--color-text-muted) focus:outline-none disabled:opacity-50"
-              />
-              <p className="mt-2 text-xs text-(--color-text-muted)">
-                Get your API key from{" "}
-                <a
-                  href="https://aistudio.google.com/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-(--color-text)"
-                >
-                  aistudio.google.com
-                </a>
-              </p>
-            </>
-          )}
-        </div>
+        {/* API Key notice when not configured */}
+        {!hasApiKey && (
+          <div className="mb-6 rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-4 py-3 text-sm">
+            <p className="font-medium">Gemini API key required</p>
+            <p className="mt-1 text-(--color-text-muted)">
+              Add <code className="rounded bg-black/10 px-1 py-0.5">GEMINI_API_KEY=your-key</code>{" "}
+              to a <code className="rounded bg-black/10 px-1 py-0.5">.env</code> file in the project
+              root. Get a key from{" "}
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-(--color-text)"
+              >
+                aistudio.google.com
+              </a>
+            </p>
+          </div>
+        )}
 
         {/* Upload Section - always visible, disabled during processing */}
         <div className="mb-6">

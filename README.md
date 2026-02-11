@@ -18,7 +18,21 @@ curl -fsSL https://bun.sh/install | bash
 
 Tax UI uses Google's Gemini to parse and analyze your tax returns. Get an API key from [aistudio.google.com](https://aistudio.google.com/apikey).
 
-### 3. Run Tax UI
+### 3. Configure the API Key
+
+Create a `.env` file in the project root:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your Gemini API key:
+
+```
+GEMINI_API_KEY=your-key-here
+```
+
+### 4. Run Tax UI
 
 ```bash
 git clone https://github.com/brianlovin/tax-ui

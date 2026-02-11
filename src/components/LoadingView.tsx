@@ -4,10 +4,13 @@ interface Props {
   filename: string;
   year: number | null;
   status: "extracting-year" | "parsing";
+  percent?: number;
+  phase?: string;
 }
 
-export function LoadingView({ filename, year, status }: Props) {
-  const statusText = status === "extracting-year" ? "Extracting year..." : "Parsing tax return...";
+export function LoadingView({ filename, year, status, percent, phase }: Props) {
+  const statusText =
+    phase ?? (status === "extracting-year" ? "Extracting year..." : "Parsing tax return...");
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center">
@@ -22,6 +25,11 @@ export function LoadingView({ filename, year, status }: Props) {
           {filename}
         </p>
         <p className="animate-pulse-soft text-xs text-(--color-text-muted)">{statusText}</p>
+        {typeof percent === "number" && (
+          <p className="mt-2 text-xs font-medium text-(--color-text-secondary)">
+            {Math.round(percent)}%
+          </p>
+        )}
       </div>
     </div>
   );

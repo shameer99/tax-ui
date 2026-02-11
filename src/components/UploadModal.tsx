@@ -1,4 +1,3 @@
-import { Input } from "@base-ui/react/input";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "./Button";
@@ -7,23 +6,12 @@ import { Dialog } from "./Dialog";
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (files: File[], apiKey: string) => Promise<void>;
-  onSaveApiKey?: (apiKey: string) => Promise<void>;
-  hasStoredKey: boolean;
+  onUpload: (files: File[]) => Promise<void>;
+  hasApiKey: boolean;
   pendingFiles: File[];
-  configureKeyOnly?: boolean;
 }
 
-export function UploadModal({
-  isOpen,
-  onClose,
-  onUpload,
-  onSaveApiKey,
-  hasStoredKey,
-  pendingFiles,
-  configureKeyOnly,
-}: Props) {
-  const [apiKey, setApiKey] = useState("");
+export function UploadModal({ isOpen, onClose, onUpload, hasApiKey, pendingFiles }: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,13 +19,11 @@ export function UploadModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeFiles = pendingFiles.length > 0 ? pendingFiles : files;
-  const needsApiKey = !hasStoredKey && !apiKey.trim();
-  const showFileUpload = pendingFiles.length === 0 && !configureKeyOnly;
+  const showFileUpload = pendingFiles.length === 0;
 
   useEffect(() => {
     if (!isOpen) {
       setFiles([]);
-      setApiKey("");
       setError(null);
     }
   }, [isOpen]);
@@ -80,27 +66,8 @@ export function UploadModal({
   }
 
   async function handleSubmit() {
-    if (configureKeyOnly) {
-      if (!apiKey.trim()) {
-        setError("Please enter your API key");
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      try {
-        await onSaveApiKey?.(apiKey.trim());
-        setApiKey("");
-        onClose();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save API key");
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    if (needsApiKey) {
-      setError("Please enter your API key");
+    if (!hasApiKey) {
+      setError("Add GEMINI_API_KEY to your .env file and restart the server");
       return;
     }
     if (activeFiles.length === 0) {
@@ -112,9 +79,8 @@ export function UploadModal({
     setError(null);
 
     try {
-      await onUpload(activeFiles, apiKey.trim());
+      await onUpload(activeFiles);
       setFiles([]);
-      setApiKey("");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process PDF");
@@ -126,17 +92,12 @@ export function UploadModal({
   function handleClose() {
     if (!isLoading) {
       setFiles([]);
-      setApiKey("");
       setError(null);
       onClose();
     }
   }
 
-  const title = configureKeyOnly
-    ? "API Key"
-    : pendingFiles.length > 0
-      ? "Enter API Key"
-      : "Upload Tax Return";
+  const title = "Upload Tax Return";
 
   return (
     <Dialog open={isOpen} onClose={handleClose} title={title} closeDisabled={isLoading}>
@@ -157,24 +118,15 @@ export function UploadModal({
         </div>
       )}
 
-      {/* API Key input */}
-      {(!hasStoredKey || configureKeyOnly) && (
-        <div className="mb-4">
-          <label className="mb-1.5 block text-xs text-(--color-text-muted)">
-            Gemini API Key
-          </label>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-            disabled={isLoading}
-            autoComplete="off"
-            data-1p-ignore
-            data-lpignore="true"
-            className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2 text-sm placeholder:text-(--color-text-muted) focus:border-(--color-text-muted) focus:outline-none disabled:opacity-50"
-          />
-          <p className="mt-1.5 text-xs text-(--color-text-muted)">Saved locally to .env file</p>
+      {/* API key required notice */}
+      {!hasApiKey && (
+        <div className="mb-4 rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-4 py-3 text-sm">
+          <p className="font-medium">Gemini API key required</p>
+          <p className="mt-1 text-(--color-text-muted)">
+            Add <code className="rounded bg-black/10 px-1 py-0.5">GEMINI_API_KEY=your-key</code> to
+            a <code className="rounded bg-black/10 px-1 py-0.5">.env</code> file in the project
+            root, then restart the server.
+          </p>
         </div>
       )}
 
@@ -226,27 +178,19 @@ export function UploadModal({
       {error && <div className="mt-4 text-sm text-(--color-negative)">{error}</div>}
 
       {/* Privacy note */}
-      {!configureKeyOnly && (
-        <div className="mt-4 text-xs text-(--color-text-muted)">
-          Your tax return is sent directly to Google's Gemini API. Data stored locally.
-        </div>
-      )}
+      <div className="mt-4 text-xs text-(--color-text-muted)">
+        Your tax return is sent directly to Google's Gemini API. Data stored locally.
+      </div>
 
       {/* Submit button */}
       <Button
         onClick={handleSubmit}
-        disabled={
-          isLoading || (configureKeyOnly ? !apiKey.trim() : needsApiKey || activeFiles.length === 0)
-        }
+        disabled={isLoading || !hasApiKey || activeFiles.length === 0}
         className="mt-4 w-full"
       >
         {isLoading
-          ? configureKeyOnly
-            ? "Saving..."
-            : "Processing..."
-          : configureKeyOnly
-            ? "Save API key"
-            : `Parse ${activeFiles.length > 1 ? `${activeFiles.length} returns` : "tax return"}`}
+          ? "Processing..."
+          : `Parse ${activeFiles.length > 1 ? `${activeFiles.length} returns` : "tax return"}`}
       </Button>
     </Dialog>
   );

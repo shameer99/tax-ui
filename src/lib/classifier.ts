@@ -77,6 +77,7 @@ Classify ALL pages in the document.`;
 export async function classifyPages(
   pdfBase64: string,
   ai: GoogleGenAI,
+  model = "gemini-3-flash-preview",
 ): Promise<PageClassification[]> {
   const pdfBytes = Buffer.from(pdfBase64, "base64");
   const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -91,7 +92,7 @@ export async function classifyPages(
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model,
     contents: [
       {
         inlineData: {

@@ -403,12 +403,27 @@ export function MainPanel(props: Props) {
         )}
       </header>
 
+      {/* Sample data banner — always visible when showing fake/fallback data */}
+      {props.isDemo && (
+        <div
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-100"
+          role="status"
+        >
+          <span className="font-semibold tracking-wide uppercase">Sample data</span>
+          <span className="text-amber-700 dark:text-amber-200">
+            — You're viewing example tax returns. Upload your own to get started.
+          </span>
+        </div>
+      )}
+
       {/* Content */}
       {props.view === "loading" ? (
         <LoadingView
           filename={props.pendingUpload.filename}
           year={props.pendingUpload.year}
           status={props.pendingUpload.status}
+          percent={props.pendingUpload.percent}
+          phase={props.pendingUpload.phase}
         />
       ) : props.view === "summary" ? (
         <div className="flex min-h-0 flex-1 flex-col">

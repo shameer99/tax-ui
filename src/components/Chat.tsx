@@ -199,6 +199,14 @@ export function Chat({
         )}
       >
         <span className="text-sm font-semibold">Chat</span>
+        {isDemo && (
+          <span
+            className="rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-black uppercase"
+            title="Chat uses demo mode"
+          >
+            Sample
+          </span>
+        )}
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleNewChat}>

@@ -11,10 +11,10 @@ import { ResetDialog } from "./components/ResetDialog";
 import { SettingsModal } from "./components/SettingsModal";
 import { SetupDialog } from "./components/SetupDialog";
 import { UploadModal } from "./components/UploadModal";
-import { sampleReturns } from "./data/sampleData";
 import { isElectron } from "./lib/electron";
 import { getDevDemoOverride, isHostedEnvironment, resolveDemoMode } from "./lib/env";
 import type { FileProgress, FileWithId, PendingUpload, TaxReturn } from "./lib/schema";
+import { observeServerTiming } from "./lib/server-timing";
 import type { NavItem } from "./lib/types";
 import { extractYearFromFilename } from "./lib/year-extractor";
 
@@ -82,7 +82,7 @@ function useElectronUpdater(devOverride: UpdateStatus | null) {
 
 const CHAT_OPEN_KEY = "tax-chat-open";
 const CHAT_HISTORY_KEY = "tax-chat-history";
-const DEMO_RESPONSE = `This is a demo with sample data. To chat about your own tax returns, clone and run [Tax UI](https://github.com/brianlovin/tax-ui) locally:
+const DEMO_RESPONSE = `This is a demo. To chat about your own tax returns, clone and run [Tax UI](https://github.com/brianlovin/tax-ui) locally:
 \`\`\`
 git clone https://github.com/brianlovin/tax-ui
 cd tax-ui
@@ -120,7 +120,7 @@ interface AppState {
 async function fetchInitialState(): Promise<
   Pick<AppState, "returns" | "hasStoredKey" | "hasUserData" | "isDemo" | "isDev">
 > {
-  // In production (static hosting), skip API calls and use sample data
+  // In production (static hosting), skip API calls
   if (isHostedEnvironment()) {
     return {
       hasStoredKey: false,
@@ -169,9 +169,44 @@ function parseSelectedId(id: string): SelectedView {
   return Number(id);
 }
 
+interface ParseProgressPayload {
+  phase: string;
+  percent: number;
+  message?: string;
+  meta?: Record<string, unknown>;
+}
+
+function getPhaseLabel(phase: string, message?: string): string {
+  if (message) return message;
+  switch (phase) {
+    case "start":
+      return "Starting parse...";
+    case "pdf_loaded":
+      return "Reading PDF...";
+    case "classifying":
+      return "Classifying pages...";
+    case "classification_done":
+      return "Selecting relevant pages...";
+    case "classification_fallback":
+      return "Fallback: classification failed — processing first 40 pages";
+    case "chunk_progress":
+      return "Extracting tax data...";
+    case "merging":
+      return "Merging results...";
+    case "parsed":
+      return "Finalizing parse...";
+    case "saving":
+      return "Saving return...";
+    case "complete":
+      return "Complete";
+    default:
+      return "Parsing tax return...";
+  }
+}
+
 export function App() {
   const [state, setState] = useState<AppState>({
-    returns: sampleReturns,
+    returns: {},
     hasStoredKey: false,
     selectedYear: "summary",
     isLoading: true,
@@ -183,7 +218,6 @@ export function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [configureKeyOnly, setConfigureKeyOnly] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(() => {
     const stored = localStorage.getItem(CHAT_OPEN_KEY);
@@ -218,15 +252,13 @@ export function App() {
   // Hide chat on mobile in demo mode
   const shouldShowChat = !effectiveIsDemo || !isMobile;
 
-  // When demo mode is toggled on, show sample data instead of user data
-  const effectiveReturns = effectiveIsDemo ? sampleReturns : state.returns;
+  const effectiveReturns = state.returns;
   const navItems = buildNavItems(effectiveReturns);
 
   useEffect(() => {
     fetchInitialState()
       .then(({ returns, hasStoredKey, hasUserData, isDemo, isDev }) => {
-        // Use user data if available, otherwise show sample data
-        const effectiveReturns = hasUserData ? returns : sampleReturns;
+        const effectiveReturns = hasUserData ? returns : {};
         setState({
           returns: effectiveReturns,
           hasStoredKey,
@@ -269,6 +301,12 @@ export function App() {
   useEffect(() => {
     saveChatMessages(chatMessages);
   }, [chatMessages]);
+
+  // Observe Server-Timing headers from API responses (dev only)
+  useEffect(() => {
+    if (!state.isDev) return;
+    return observeServerTiming();
+  }, [state.isDev]);
 
   // Auto-submit pending message when chat is ready
   useEffect(() => {
@@ -314,31 +352,63 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  async function processUpload(file: File, apiKey: string): Promise<TaxReturn> {
+  async function processUpload(
+    file: File,
+    onProgress?: (progress: ParseProgressPayload) => void,
+  ): Promise<TaxReturn> {
+    const progressId = crypto.randomUUID();
     const formData = new FormData();
     formData.append("pdf", file);
-    if (apiKey) formData.append("apiKey", apiKey);
+    formData.append("progressId", progressId);
 
-    const res = await fetch("/api/parse", { method: "POST", body: formData });
-    if (!res.ok) {
-      const { error } = await res.json();
-      throw new Error(error || `HTTP ${res.status}`);
+    // Poll progress in the background while /api/parse blocks
+    let polling = true;
+    const poll = async () => {
+      while (polling) {
+        await new Promise((r) => setTimeout(r, 600));
+        if (!polling) break;
+        try {
+          const res = await fetch(`/api/parse-progress/${progressId}`);
+          if (!res.ok) continue;
+          const job = await res.json();
+          if (job.phase !== "pending") {
+            onProgress?.({
+              phase: job.phase,
+              percent: job.percent,
+              message: job.message,
+            });
+          }
+        } catch {
+          // Ignore poll errors
+        }
+      }
+    };
+    const pollPromise = poll();
+
+    try {
+      const res = await fetch("/api/parse", { method: "POST", body: formData });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error || `HTTP ${res.status}`);
+      }
+      const taxReturn = (await res.json()) as TaxReturn;
+      onProgress?.({ phase: "complete", percent: 100, message: "Complete" });
+
+      const returns = (await (await fetch("/api/returns")).json()) as Record<number, TaxReturn>;
+      setState((s) => ({
+        ...s,
+        returns,
+        hasStoredKey: true,
+        hasUserData: true,
+        selectedYear:
+          s.selectedYear === "summary" ? "summary" : (taxReturn?.year ?? s.selectedYear),
+      }));
+
+      return taxReturn;
+    } finally {
+      polling = false;
+      await pollPromise;
     }
-
-    const taxReturn: TaxReturn = await res.json();
-    const returnsRes = await fetch("/api/returns");
-    const returns = await returnsRes.json();
-
-    setState((s) => ({
-      ...s,
-      returns,
-      hasStoredKey: true,
-      hasUserData: true,
-      // Stay on summary if already there, otherwise navigate to new year
-      selectedYear: s.selectedYear === "summary" ? "summary" : taxReturn.year,
-    }));
-
-    return taxReturn;
   }
 
   async function handleUploadFromSidebar(files: File[]) {
@@ -359,6 +429,8 @@ export function App() {
         filename: file.name,
         year: filenameYear,
         status: filenameYear ? "parsing" : "extracting-year",
+        percent: filenameYear ? 2 : undefined,
+        phase: filenameYear ? "Queued..." : "Extracting year...",
         file,
       };
     });
@@ -386,13 +458,19 @@ export function App() {
             const { year: extractedYear } = await yearRes.json();
             setPendingUploads((prev) =>
               prev.map((p) =>
-                p.id === pending.id ? { ...p, year: extractedYear, status: "parsing" } : p,
+                p.id === pending.id
+                  ? { ...p, year: extractedYear, status: "parsing", percent: 2, phase: "Queued..." }
+                  : p,
               ),
             );
           } catch (err) {
             console.error("Year extraction failed:", err);
             setPendingUploads((prev) =>
-              prev.map((p) => (p.id === pending.id ? { ...p, status: "parsing" } : p)),
+              prev.map((p) =>
+                p.id === pending.id
+                  ? { ...p, status: "parsing", percent: 2, phase: "Queued..." }
+                  : p,
+              ),
             );
           }
         }),
@@ -403,7 +481,20 @@ export function App() {
     let successfulUploads = 0;
     for (const pending of newPendingUploads) {
       try {
-        await processUpload(pending.file, "");
+        await processUpload(pending.file, (progress) => {
+          setPendingUploads((prev) =>
+            prev.map((p) =>
+              p.id === pending.id
+                ? {
+                    ...p,
+                    status: "parsing",
+                    percent: progress.percent,
+                    phase: getPhaseLabel(progress.phase, progress.message),
+                  }
+                : p,
+            ),
+          );
+        });
         successfulUploads++;
         // Remove from pending uploads after success
         setPendingUploads((prev) => prev.filter((p) => p.id !== pending.id));
@@ -432,24 +523,11 @@ export function App() {
     }
   }
 
-  async function handleUploadFromModal(files: File[], apiKey: string) {
+  async function handleUploadFromModal(files: File[]) {
     for (const file of files) {
-      await processUpload(file, apiKey);
+      await processUpload(file);
     }
     setPendingFiles([]);
-  }
-
-  async function handleSaveApiKey(apiKey: string) {
-    const res = await fetch("/api/config/key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey }),
-    });
-    if (!res.ok) {
-      const { error } = await res.json();
-      throw new Error(error || `HTTP ${res.status}`);
-    }
-    setState((s) => ({ ...s, hasStoredKey: true }));
   }
 
   async function handleClearData() {
@@ -458,10 +536,9 @@ export function App() {
       const { error } = await res.json();
       throw new Error(error || `HTTP ${res.status}`);
     }
-    // Reset to initial state with sample data
     setState((s) => ({
-      returns: sampleReturns,
-      hasStoredKey: false,
+      returns: {},
+      hasStoredKey: s.hasStoredKey,
       selectedYear: "summary",
       isLoading: false,
       hasUserData: false,
@@ -585,10 +662,9 @@ export function App() {
       delete newReturns[year];
 
       if (isLastYear) {
-        // Last year deleted - reset to sample data state
         return {
           ...s,
-          returns: sampleReturns,
+          returns: {},
           selectedYear: "summary",
           hasUserData: false,
         };
@@ -684,7 +760,7 @@ export function App() {
 
   // Show onboarding dialog for new users (unless dismissed) or when manually opened
   // Processing takes precedence - keep dialog open while processing
-  // In demo mode, don't auto-show - let users browse sample data first
+  // In demo mode, don't auto-show onboarding
   const showOnboarding =
     isOnboardingProcessing ||
     openModal === "onboarding" ||
@@ -707,7 +783,7 @@ export function App() {
     return "summary"; // multiple files -> summary
   }
 
-  async function handleOnboardingUpload(files: FileWithId[], apiKey: string) {
+  async function handleOnboardingUpload(files: FileWithId[]) {
     setIsOnboardingProcessing(true);
     const existingYears = Object.keys(state.returns).map(Number);
 
@@ -719,11 +795,6 @@ export function App() {
     }));
     setOnboardingProgress(progress);
 
-    // Save API key if needed
-    if (!state.hasStoredKey && apiKey) {
-      await handleSaveApiKey(apiKey);
-    }
-
     // Process files with progress updates
     const uploadedYears: number[] = [];
     for (let i = 0; i < files.length; i++) {
@@ -731,13 +802,34 @@ export function App() {
       const file = fileWithId.file;
       const id = fileWithId.id;
 
-      setOnboardingProgress((p) => p.map((f) => (f.id === id ? { ...f, status: "parsing" } : f)));
+      setOnboardingProgress((p) =>
+        p.map((f) =>
+          f.id === id ? { ...f, status: "parsing", percent: 2, phase: "Queued..." } : f,
+        ),
+      );
 
       try {
-        const taxReturn = await processUpload(file, apiKey);
+        const taxReturn = await processUpload(file, (progress) => {
+          setOnboardingProgress((p) =>
+            p.map((f) =>
+              f.id === id
+                ? {
+                    ...f,
+                    status: "parsing",
+                    percent: progress.percent,
+                    phase: getPhaseLabel(progress.phase, progress.message),
+                  }
+                : f,
+            ),
+          );
+        });
         uploadedYears.push(taxReturn.year);
         setOnboardingProgress((p) =>
-          p.map((f) => (f.id === id ? { ...f, status: "complete", year: taxReturn.year } : f)),
+          p.map((f) =>
+            f.id === id
+              ? { ...f, status: "complete", year: taxReturn.year, percent: 100, phase: "Complete" }
+              : f,
+          ),
         );
       } catch (err) {
         setOnboardingProgress((p) =>
@@ -746,6 +838,7 @@ export function App() {
               ? {
                   ...f,
                   status: "error",
+                  percent: undefined,
                   error: err instanceof Error ? err.message : "Failed",
                 }
               : f,
@@ -816,7 +909,7 @@ export function App() {
           onClose={handleOnboardingClose}
           isProcessing={isOnboardingProcessing}
           fileProgress={onboardingProgress}
-          hasStoredKey={state.hasStoredKey}
+          hasApiKey={state.hasStoredKey}
           existingYears={state.hasUserData ? Object.keys(state.returns).map(Number) : []}
           skipOpenAnimation={skipOnboardingAnimation}
         />
@@ -827,20 +920,16 @@ export function App() {
         onClose={() => {
           setIsModalOpen(false);
           setPendingFiles([]);
-          setConfigureKeyOnly(false);
         }}
         onUpload={handleUploadFromModal}
-        onSaveApiKey={handleSaveApiKey}
-        hasStoredKey={state.hasStoredKey}
+        hasApiKey={state.hasStoredKey}
         pendingFiles={pendingFiles}
-        configureKeyOnly={configureKeyOnly}
       />
 
       <SettingsModal
         isOpen={openModal === "settings"}
         onClose={() => setOpenModal(null)}
         hasApiKey={state.hasStoredKey}
-        onSaveApiKey={handleSaveApiKey}
         onClearData={handleClearData}
       />
 
@@ -849,27 +938,6 @@ export function App() {
         onClose={() => setOpenModal(null)}
         onReset={handleClearData}
       />
-
-      {/* Demo island - show in demo mode when dialog is closed */}
-      {effectiveIsDemo && !showOnboarding && (
-        <>
-          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-90 h-96 bg-linear-to-t from-white to-transparent md:h-128 dark:from-black" />
-          <button
-            onClick={() => setOpenModal("onboarding")}
-            className="dark:shadow-contrast fixed right-8 bottom-8 left-8 z-100 flex cursor-pointer flex-col gap-3 rounded-2xl bg-black p-4 text-white shadow-md ring-[0.5px] ring-black/10 md:max-w-lg md:p-6 dark:bg-neutral-900"
-          >
-            <div className="mb-2 flex flex-col items-start justify-start text-left text-lg">
-              <span className="font-semibold text-white">Tax UI</span>
-              <span className="font-medium opacity-70">
-                Visualize and chat with your tax returns.
-              </span>
-            </div>
-            <span className="self-start rounded-lg bg-(--color-brand) px-3 py-1.5 text-base font-semibold text-neutral-900 text-white">
-              Get started
-            </span>
-          </button>
-        </>
-      )}
 
       {updater && (
         <div className="get-started-pill dark:shadow-contrast fixed right-6 bottom-6 z-50 flex h-10 items-center gap-2 rounded-full bg-black pr-1.5 pl-4 text-sm text-white shadow-lg transition-all duration-300 ease-out dark:bg-zinc-800">

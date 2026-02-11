@@ -10,6 +10,8 @@ export interface DisplayFile {
   filename: string;
   year: number | null;
   status: FileStatus;
+  percent?: number;
+  phase?: string;
   isDuplicate: boolean;
   error?: string;
 }
@@ -116,7 +118,14 @@ function FileStatusIndicator({ file }: { file: DisplayFile }) {
           exit={{ opacity: 0, scale: 0.8 }}
           transition={{ duration: 0.15 }}
         >
-          <BrailleSpinner />
+          <div className="flex items-center gap-2">
+            <BrailleSpinner />
+            {typeof file.percent === "number" && (
+              <span className="text-xs text-(--color-text-muted) tabular-nums">
+                {Math.round(file.percent)}%
+              </span>
+            )}
+          </div>
         </motion.div>
       )}
       {file.status === "complete" && (
