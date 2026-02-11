@@ -320,7 +320,7 @@ export function SetupDialogPreview({ onClose }: Props) {
                       className="w-full rounded-lg border border-(--color-border) bg-(--color-bg-muted) px-3 py-2.5 text-sm placeholder:text-(--color-text-muted) focus:border-(--color-text-muted) focus:outline-none disabled:opacity-50"
                     />
                     <p className="mt-2 text-xs text-(--color-text-muted)">
-                      Get your API key from <span className="underline">console.anthropic.com</span>
+                      Get your API key from <span className="underline">aistudio.google.com</span>
                     </p>
                   </>
                 )}

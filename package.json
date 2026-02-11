@@ -19,9 +19,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,json}\""
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.1.25",
-    "@anthropic-ai/sdk": "^0.72.1",
     "@base-ui/react": "^1.1.0",
+    "@google/genai": "^1.40.0",
     "@tanstack/react-table": "^8.21.3",
     "bun-plugin-tailwind": "^0.1.2",
     "clsx": "^2.1.1",

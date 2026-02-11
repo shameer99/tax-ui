@@ -284,12 +284,12 @@ export function SetupDialog({
               <p className="mt-2 text-xs text-(--color-text-muted)">
                 Get your API key from{" "}
                 <a
-                  href="https://console.anthropic.com/settings/keys"
+                  href="https://aistudio.google.com/apikey"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-(--color-text)"
                 >
-                  console.anthropic.com
+                  aistudio.google.com
                 </a>
               </p>
             </>

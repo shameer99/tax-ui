@@ -12,12 +12,13 @@ async function createPdf(pageCount: number): Promise<string> {
   return Buffer.from(bytes).toString("base64");
 }
 
-// Fake Anthropic client that records whether it was called
+// Fake Gemini client that records whether it was called
 function fakeClient(called: { value: boolean }) {
   return {
-    messages: {
-      create: () => {
+    models: {
+      generateContent: () => {
         called.value = true;
+        return Promise.resolve({ text: "[]" });
       },
     },
   } as never;

@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { PDFDocument } from "pdf-lib";
 
 export type FormType =
@@ -76,7 +76,7 @@ Classify ALL pages in the document.`;
 
 export async function classifyPages(
   pdfBase64: string,
-  client: Anthropic,
+  ai: GoogleGenAI,
 ): Promise<PageClassification[]> {
   const pdfBytes = Buffer.from(pdfBase64, "base64");
   const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -90,37 +90,26 @@ export async function classifyPages(
     }));
   }
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4096,
-    messages: [
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
       {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
-            },
-          },
-          {
-            type: "text",
-            text: CLASSIFICATION_PROMPT,
-          },
-        ],
+        inlineData: {
+          mimeType: "application/pdf",
+          data: pdfBase64,
+        },
       },
+      { text: CLASSIFICATION_PROMPT },
     ],
   });
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No classification response from Claude");
+  const text = response.text;
+  if (!text) {
+    throw new Error("No classification response from Gemini");
   }
 
   // Parse the JSON response
-  const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error("Could not parse classification response");
   }

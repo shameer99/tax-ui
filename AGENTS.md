@@ -5,7 +5,7 @@ Tax return PDF parser using Claude API and Bun.
 ## Stack
 
 - Bun with HTML imports (React frontend)
-- Google Gemini API for PDF parsing
+- Anthropic SDK for PDF parsing
 - Tailwind CSS v4
 - Zod for schema validation
 
@@ -17,7 +17,7 @@ Tax return PDF parser using Claude API and Bun.
 ## Architecture
 
 - `src/index.ts` — Bun.serve() routes
-- `src/lib/parser.ts` — Gemini API PDF parsing
+- `src/lib/parser.ts` — Claude API PDF parsing
 - `src/lib/storage.ts` — Local file persistence
 - `src/App.tsx` — React frontend entry
 

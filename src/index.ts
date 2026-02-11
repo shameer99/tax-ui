@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { argv, serve } from "bun";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,7 +16,7 @@ import {
 } from "./lib/storage";
 
 // Model used for lightweight operations (validation, suggestions)
-const FAST_MODEL = "claude-haiku-4-5-20251001";
+const FAST_MODEL = "gemini-2.5-flash";
 
 function isAuthError(message: string): boolean {
   return (
@@ -78,11 +78,10 @@ const routes: Record<string, any> = {
 
       // Validate the key with a minimal API call
       try {
-        const client = new Anthropic({ apiKey: apiKey.trim() });
-        await client.messages.create({
+        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+        await ai.models.generateContent({
           model: FAST_MODEL,
-          max_tokens: 1,
-          messages: [{ role: "user", content: "hi" }],
+          contents: "hi",
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
@@ -164,28 +163,29 @@ const routes: Record<string, any> = {
       // Use client-provided returns (for dev sample data) or fall back to stored returns
       const returns =
         clientReturns && Object.keys(clientReturns).length > 0 ? clientReturns : await getReturns();
-      const client = new Anthropic({ apiKey });
+      const ai = new GoogleGenAI({ apiKey });
 
       try {
-        // Build messages from history
-        const messages: Anthropic.MessageParam[] = [];
+        // Build contents from history + prompt (Gemini uses user/model roles)
+        const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
         for (const msg of history || []) {
-          messages.push({
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
+          contents.push({
+            role: msg.role === "assistant" ? "model" : "user",
+            parts: [{ text: msg.content }],
           });
         }
-        messages.push({ role: "user", content: prompt });
+        contents.push({ role: "user", parts: [{ text: prompt }] });
 
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-5-20250929",
-          max_tokens: 2048,
-          system: buildChatSystemPrompt(returns),
-          messages,
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents,
+          config: {
+            systemInstruction: buildChatSystemPrompt(returns),
+            maxOutputTokens: 2048,
+          },
         });
 
-        const textBlock = response.content.find((block) => block.type === "text");
-        const responseText = textBlock?.type === "text" ? textBlock.text : "No response";
+        const responseText = response.text ?? "No response";
 
         return Response.json({ response: responseText });
       } catch (error) {
@@ -208,39 +208,39 @@ const routes: Record<string, any> = {
         return Response.json({ suggestions: [] });
       }
 
-      const returns =
+      const _returns =
         clientReturns && Object.keys(clientReturns).length > 0 ? clientReturns : await getReturns();
 
-      const client = new Anthropic({ apiKey });
+      const ai = new GoogleGenAI({ apiKey });
 
       try {
-        const messages: Anthropic.MessageParam[] = history.map(
-          (msg: { role: string; content: string }) => ({
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
-          }),
-        );
-        // Structured outputs don't allow assistant messages in final position
-        messages.push({ role: "user", content: "Suggest 3 follow-up questions I might ask." });
+        const contents: Array<{ role: string; parts: Array<{ text: string }> }> = (
+          history || []
+        ).map((msg: { role: string; content: string }) => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }],
+        }));
+        contents.push({
+          role: "user",
+          parts: [{ text: "Suggest 3 follow-up questions I might ask." }],
+        });
 
-        const response = await client.messages.create({
+        const response = await ai.models.generateContent({
           model: FAST_MODEL,
-          max_tokens: 256,
-          system: `You are helping a user explore their own tax return data. Generate 3 short follow-up questions the user might want to ask about their finances. Phrase questions in FIRST PERSON (e.g., "Why did my income drop?" not "Why did your income drop?").`,
-          messages,
-          output_config: {
-            format: {
-              type: "json_schema",
-              schema: {
-                type: "array",
-                items: { type: "string" },
-              },
+          contents,
+          config: {
+            systemInstruction: `You are helping a user explore their own tax return data. Generate 3 short follow-up questions the user might want to ask about their finances. Phrase questions in FIRST PERSON (e.g., "Why did my income drop?" not "Why did your income drop?"). Respond with a JSON array of strings only.`,
+            maxOutputTokens: 256,
+            responseMimeType: "application/json",
+            responseJsonSchema: {
+              type: "array",
+              items: { type: "string" },
             },
           },
         });
 
-        const textBlock = response.content.find((block) => block.type === "text");
-        const suggestions = JSON.parse(textBlock?.type === "text" ? textBlock.text : "[]");
+        const text = response.text;
+        const suggestions = text ? JSON.parse(text) : [];
 
         return Response.json({ suggestions: suggestions.slice(0, 3) });
       } catch (error) {

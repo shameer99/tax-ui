@@ -205,7 +205,7 @@ export function DemoDialog({ isOpen, onClose, skipOpenAnimation }: Props) {
                 </a>{" "}
                 and an{" "}
                 <a
-                  href="https://console.anthropic.com/settings/keys"
+                  href="https://aistudio.google.com/apikey"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-(--color-text)"

@@ -60,7 +60,7 @@ export async function deleteReturn(year: number): Promise<void> {
 }
 
 export function getApiKey(): string | undefined {
-  return process.env.ANTHROPIC_API_KEY;
+  return process.env.GEMINI_API_KEY;
 }
 
 export async function saveApiKey(key: string): Promise<void> {
@@ -69,24 +69,24 @@ export async function saveApiKey(key: string): Promise<void> {
 
   if (await file.exists()) {
     content = await file.text();
-    if (content.includes("ANTHROPIC_API_KEY=")) {
-      content = content.replace(/ANTHROPIC_API_KEY=.*/g, `ANTHROPIC_API_KEY=${key}`);
+    if (content.includes("GEMINI_API_KEY=")) {
+      content = content.replace(/GEMINI_API_KEY=.*/g, `GEMINI_API_KEY=${key}`);
     } else {
-      content = content.trim() + `\nANTHROPIC_API_KEY=${key}\n`;
+      content = content.trim() + `\nGEMINI_API_KEY=${key}\n`;
     }
   } else {
-    content = `ANTHROPIC_API_KEY=${key}\n`;
+    content = `GEMINI_API_KEY=${key}\n`;
   }
 
   await Bun.write(ENV_FILE, content);
-  process.env.ANTHROPIC_API_KEY = key;
+  process.env.GEMINI_API_KEY = key;
 }
 
 export async function removeApiKey(): Promise<void> {
   const envFile = Bun.file(ENV_FILE);
   if (await envFile.exists()) {
     let content = await envFile.text();
-    content = content.replace(/^ANTHROPIC_API_KEY=.*$/gm, "").trim();
+    content = content.replace(/^GEMINI_API_KEY=.*$/gm, "").trim();
     if (content) {
       await Bun.write(ENV_FILE, content + "\n");
     } else {
@@ -94,7 +94,7 @@ export async function removeApiKey(): Promise<void> {
       await fs.unlink(ENV_FILE);
     }
   }
-  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
 }
 
 export async function clearAllData(): Promise<void> {
@@ -108,7 +108,7 @@ export async function clearAllData(): Promise<void> {
   const envFile = Bun.file(ENV_FILE);
   if (await envFile.exists()) {
     let content = await envFile.text();
-    content = content.replace(/^ANTHROPIC_API_KEY=.*$/gm, "").trim();
+    content = content.replace(/^GEMINI_API_KEY=.*$/gm, "").trim();
     if (content) {
       await Bun.write(ENV_FILE, content + "\n");
     } else {
@@ -117,5 +117,5 @@ export async function clearAllData(): Promise<void> {
       await fs.unlink(ENV_FILE);
     }
   }
-  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
 }

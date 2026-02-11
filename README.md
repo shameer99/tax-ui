@@ -14,9 +14,9 @@ Tax UI runs on [Bun](https://bun.sh), a fast JavaScript runtime.
 curl -fsSL https://bun.sh/install | bash
 ```
 
-### 2. Get an Anthropic API Key
+### 2. Get a Gemini API Key
 
-Tax UI uses Claude to parse and analyze your tax returns. Get an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys).
+Tax UI uses Google's Gemini to parse and analyze your tax returns. Get an API key from [aistudio.google.com](https://aistudio.google.com/apikey).
 
 ### 3. Run Tax UI
 
@@ -33,19 +33,19 @@ Open [localhost:3000](http://localhost:3000) in your browser.
 
 1. **Upload** your tax return PDFs (upload a single PDF per year)
 2. **Review** parsed income, deductions, and tax breakdowns
-3. **Chat** with Claude to understand your tax situation
+3. **Chat** with Gemini to understand your tax situation
 
 ## Privacy & Security
 
 ### How Your Data is Processed
 
-Your tax data is processed locally and sent directly to Anthropic's API using your own API key. No data is stored on any third-party servers.
+Your tax data is processed locally and sent directly to Google's Gemini API using your own API key. No data is stored on any third-party servers.
 
-- Tax return PDFs are sent to Anthropic's API for parsing
+- Tax return PDFs are sent to Google's Gemini API for parsing
 - Parsed data is stored only on your local machine
 - Your API key stays on your computer and is never transmitted elsewhere
 
-Anthropic's commercial terms prohibit training models on API customer data. See [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy).
+Google's API terms govern data processing. See [Google AI Privacy Policy](https://policies.google.com/privacy).
 
 ### Verify It Yourself
 
@@ -62,13 +62,13 @@ Repository: https://github.com/brianlovin/tax-ui
 Please analyze the source code and verify:
 
 1. DATA HANDLING
-   - Tax return PDFs are sent directly to Anthropic's API for parsing
+   - Tax return PDFs are sent directly to Google's Gemini API for parsing
    - No data is sent to any other third-party servers
    - Parsed data is stored locally only
 
 2. NETWORK ACTIVITY
    - Identify all network requests in the codebase
-   - Verify the only external calls are to Anthropic's API
+   - Verify the only external calls are to Google's Gemini API
    - Check for any hidden data collection or tracking
 
 3. API KEY SECURITY
@@ -81,7 +81,7 @@ Please analyze the source code and verify:
 
 Key files to review:
 - src/index.ts (Bun server and API routes)
-- src/lib/parser.ts (Claude API integration)
+- src/lib/parser.ts (Gemini API integration)
 - src/lib/storage.ts (Local file storage)
 - src/App.tsx (React frontend)
 
@@ -93,5 +93,5 @@ Report any privacy or security concerns. I'm considering using this app with sen
 ## Requirements
 
 - [Bun](https://bun.sh) v1.0 or later
-- [Anthropic API key](https://console.anthropic.com/settings/keys)
+- [Gemini API key](https://aistudio.google.com/apikey)
 - Your own tax return PDFs

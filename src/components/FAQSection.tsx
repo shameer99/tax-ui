@@ -99,7 +99,7 @@ export function FAQSection() {
                 <p>
                   Anthropic's commercial terms prohibit training models on API customer data.{" "}
                   <a
-                    href="https://www.anthropic.com/legal/privacy"
+                    href="https://policies.google.com/privacy"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline hover:text-(--color-text)"

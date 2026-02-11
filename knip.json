@@ -3,5 +3,5 @@
   "entry": ["src/frontend.tsx"],
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/**/*.test.ts"],
-  "ignoreDependencies": ["tailwindcss", "@anthropic-ai/claude-code"]
+  "ignoreDependencies": ["tailwindcss"]
 }

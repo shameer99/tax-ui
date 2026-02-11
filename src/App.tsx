@@ -89,7 +89,7 @@ cd tax-ui
 bun install
 bun run dev
 \`\`\`
-You'll need [Bun](https://bun.sh) and an [Anthropic API key](https://console.anthropic.com).`;
+You'll need [Bun](https://bun.sh) and a [Gemini API key](https://aistudio.google.com/apikey).`;
 
 function loadChatMessages(): ChatMessage[] {
   try {

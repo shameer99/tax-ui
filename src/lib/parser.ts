@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { GoogleGenAI } from "@google/genai";
 import { PDFDocument } from "pdf-lib";
+import { z } from "zod";
 
 import { classifyPages } from "./classifier";
 import { EXTRACTION_PROMPT } from "./prompt";
@@ -64,40 +64,30 @@ async function splitPdf(pdfBase64: string): Promise<string[]> {
   return chunks;
 }
 
-async function parseChunk(pdfBase64: string, client: Anthropic): Promise<TaxReturn> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 4096,
-    messages: [
+async function parseChunk(pdfBase64: string, ai: GoogleGenAI): Promise<TaxReturn> {
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
       {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
-            },
-          },
-          {
-            type: "text",
-            text: EXTRACTION_PROMPT,
-          },
-        ],
+        inlineData: {
+          mimeType: "application/pdf",
+          data: pdfBase64,
+        },
       },
+      { text: EXTRACTION_PROMPT },
     ],
-    output_config: {
-      format: zodOutputFormat(TaxReturnSchema),
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: z.toJSONSchema(TaxReturnSchema),
     },
   });
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from Claude");
+  const text = response.text;
+  if (!text) {
+    throw new Error("No text response from Gemini");
   }
 
-  return JSON.parse(textBlock.text);
+  return JSON.parse(text) as TaxReturn;
 }
 
 function mergeLabeledAmounts(
@@ -189,7 +179,7 @@ function mergeReturns(returns: TaxReturn[]): TaxReturn {
   return base;
 }
 
-async function smartExtract(pdfBase64: string, client: Anthropic): Promise<TaxReturn> {
+async function smartExtract(pdfBase64: string, ai: GoogleGenAI): Promise<TaxReturn> {
   const pdfBytes = Buffer.from(pdfBase64, "base64");
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const totalPages = pdfDoc.getPageCount();
@@ -198,25 +188,25 @@ async function smartExtract(pdfBase64: string, client: Anthropic): Promise<TaxRe
   if (totalPages <= CLASSIFICATION_THRESHOLD) {
     const chunks = await splitPdf(pdfBase64);
     if (chunks.length === 1) {
-      return parseChunk(chunks[0]!, client);
+      return parseChunk(chunks[0]!, ai);
     }
     const results: TaxReturn[] = [];
     for (const chunk of chunks) {
-      results.push(await parseChunk(chunk, client));
+      results.push(await parseChunk(chunk, ai));
     }
     return mergeReturns(results);
   }
 
-  // Classify pages using Haiku
+  // Classify pages using Gemini
   let classifications;
   try {
-    classifications = await classifyPages(pdfBase64, client);
+    classifications = await classifyPages(pdfBase64, ai);
   } catch (error) {
     // Fallback: process first 40 pages if classification fails
     console.error("Classification failed, using fallback:", error);
     const fallbackPages = Array.from({ length: Math.min(totalPages, MAX_PAGES) }, (_, i) => i + 1);
     const fallbackPdf = await extractPages(pdfBase64, fallbackPages);
-    return parseChunk(fallbackPdf, client);
+    return parseChunk(fallbackPdf, ai);
   }
 
   // Select important pages based on classification
@@ -227,13 +217,13 @@ async function smartExtract(pdfBase64: string, client: Anthropic): Promise<TaxRe
   if (selectedPages.length === 0) {
     const fallbackPages = Array.from({ length: Math.min(totalPages, MAX_PAGES) }, (_, i) => i + 1);
     const fallbackPdf = await extractPages(pdfBase64, fallbackPages);
-    return parseChunk(fallbackPdf, client);
+    return parseChunk(fallbackPdf, ai);
   }
 
   // Extract only selected pages
   if (selectedPages.length <= MAX_PAGES) {
     const selectedPdf = await extractPages(pdfBase64, selectedPages);
-    return parseChunk(selectedPdf, client);
+    return parseChunk(selectedPdf, ai);
   }
 
   // If still too many pages, chunk the selected pages
@@ -241,22 +231,22 @@ async function smartExtract(pdfBase64: string, client: Anthropic): Promise<TaxRe
   for (let start = 0; start < selectedPages.length; start += MAX_PAGES) {
     const chunkPageNumbers = selectedPages.slice(start, start + MAX_PAGES);
     const chunkPdf = await extractPages(pdfBase64, chunkPageNumbers);
-    results.push(await parseChunk(chunkPdf, client));
+    results.push(await parseChunk(chunkPdf, ai));
   }
 
   return mergeReturns(results);
 }
 
 export async function parseTaxReturn(pdfBase64: string, apiKey: string): Promise<TaxReturn> {
-  const client = new Anthropic({ apiKey });
-  return smartExtract(pdfBase64, client);
+  const ai = new GoogleGenAI({ apiKey });
+  return smartExtract(pdfBase64, ai);
 }
 
 export async function extractYearFromPdf(
   pdfBase64: string,
   apiKey: string,
 ): Promise<number | null> {
-  const client = new Anthropic({ apiKey });
+  const ai = new GoogleGenAI({ apiKey });
 
   // Extract just the first page for fast year detection
   const pdfBytes = Buffer.from(pdfBase64, "base64");
@@ -267,36 +257,27 @@ export async function extractYearFromPdf(
   const firstPageBase64 = Buffer.from(await firstPageDoc.save()).toString("base64");
 
   try {
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 50,
-      messages: [
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
         {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: firstPageBase64,
-              },
-            },
-            {
-              type: "text",
-              text: "What tax year is this document for? Respond with ONLY the 4-digit year (e.g., 2023). If you cannot determine the year, respond with 'UNKNOWN'.",
-            },
-          ],
+          inlineData: {
+            mimeType: "application/pdf",
+            data: firstPageBase64,
+          },
+        },
+        {
+          text: "What tax year is this document for? Respond with ONLY the 4-digit year (e.g., 2023). If you cannot determine the year, respond with 'UNKNOWN'.",
         },
       ],
     });
 
-    const textBlock = response.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    const text = response.text;
+    if (!text) {
       return null;
     }
 
-    const yearMatch = textBlock.text.match(/\b(19|20)\d{2}\b/);
+    const yearMatch = text.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
       return parseInt(yearMatch[0], 10);
     }
