@@ -5,7 +5,7 @@ Tax return PDF parser using Claude API and Bun.
 ## Stack
 
 - Bun with HTML imports (React frontend)
-- Anthropic SDK for PDF parsing
+- Google Gemini API for PDF parsing
 - Tailwind CSS v4
 - Zod for schema validation
 
